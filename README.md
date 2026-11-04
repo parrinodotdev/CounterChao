@@ -1,6 +1,5 @@
 # chaomod
 
-Leetify integration for Sonic Adventure 2 Chao Garden
 Kills, headshots, flashes and multi-kills become Chaos Drives and animals that appear in your garden!
 After 25 years of replaying City Escape, we're playing Counter-Strike 2 to feed the colony.
 
