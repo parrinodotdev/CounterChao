@@ -22,3 +22,26 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# C++ mod build output
+mod/Release/
+mod/Debug/
+mod/x64/
+mod/.vs/
+mod/my-mod/Release/
+mod/my-mod/Debug/
+mod/my-mod/x64/
+*.user
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.ipdb
+*.iobj
+*.tlog
+
+# mod runtime files, which live in the game's mods folder, listed in case they get copied
+settings.json
+state.json
+chaomod.log
+chaomod.log.old
