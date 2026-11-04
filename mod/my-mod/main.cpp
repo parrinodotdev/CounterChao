@@ -10,6 +10,10 @@
 #include <set>
 #include <random>
 #include <fstream>
+#include <map>
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include "json.hpp"
 #pragma comment(lib, "winhttp.lib")
 
@@ -143,30 +147,89 @@ static void Say(const char* fmt, ...)
     while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) msg[--n] = 0;
     Log("%s", msg);                              // chaomod.log
 }
+// ---- settings: config.ini (written by the Mod Manager's Configure window), with settings.json as a fallback ----
+static bool g_keepLog = true;
+static std::map<std::string, std::string> g_ini;   // "section|key" in lower case -> value
+
+static std::string Trim(const std::string& s)
+{
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return "";
+    size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+static std::string Lower(std::string s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    return s;
+}
+
+static void ReadIni(const std::string& file)
+{
+    g_ini.clear();
+    std::ifstream f(file);
+    if (!f) return;
+    std::string line, section;
+    bool first = true;
+    while (std::getline(f, line)) {
+        if (first && line.size() >= 3 && (unsigned char)line[0] == 0xEF && (unsigned char)line[1] == 0xBB && (unsigned char)line[2] == 0xBF)
+            line.erase(0, 3);                           // skip a UTF-8 byte-order mark
+        first = false;
+        line = Trim(line);
+        if (line.empty() || line[0] == ';' || line[0] == '#') continue;
+        if (line[0] == '[' && line.back() == ']') { section = Lower(Trim(line.substr(1, line.size() - 2))); continue; }
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        g_ini[section + "|" + Lower(Trim(line.substr(0, eq)))] = Trim(line.substr(eq + 1));
+    }
+}
+
+static bool IniGet(const char* key, std::string& out)
+{
+    std::string k = Lower(key);
+    auto it = g_ini.find("general|" + k);               // the group name in configschema.xml
+    if (it == g_ini.end()) it = g_ini.find("|" + k);    // or a key outside any section
+    if (it == g_ini.end()) return false;
+    out = it->second;
+    return true;
+}
+
+static bool ValidSteam(const std::string& s)
+{
+    return s.size() == 17 && s.find_first_not_of("0123456789") == std::string::npos;
+}
+
 static bool LoadSettings(std::string& err)
 {
-    std::string p = g_modDir + "\\settings.json";
-    if (GetFileAttributesA(p.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        std::ofstream o(p);
-        o << "{\n  \"steam64_id\": \"PASTE_YOUR_STEAM64_HERE\",\n  \"first_run_matches\": 1\n}\n";
-        err = "created settings.json in the mod folder; put your SteamID64 in it (in quotes) and restart the game";
-        return false;
+    const char* source = "";
+    ReadIni(g_modDir + "\\config.ini");
+    std::string v;
+    if (IniGet("SteamID64", v)) g_steam = Trim(v);
+    if (IniGet("FirstRunMatches", v)) g_firstRunMatches = atoi(v.c_str());
+    if (IniGet("KeepLog", v)) g_keepLog = (Lower(v) == "true" || v == "1");
+    if (ValidSteam(g_steam)) source = "config.ini";
+
+    if (!ValidSteam(g_steam)) {                         // fall back to our own testing file
+        std::string p = g_modDir + "\\settings.json";
+        if (GetFileAttributesA(p.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            try {
+                std::ifstream f(p);
+                json j = json::parse(f);
+                if (j.contains("steam64_id") && j["steam64_id"].is_number_unsigned())
+                    g_steam = std::to_string(j["steam64_id"].get<unsigned long long>());
+                else
+                    g_steam = j.value("steam64_id", std::string());
+                g_firstRunMatches = j.value("first_run_matches", g_firstRunMatches);
+                if (ValidSteam(g_steam)) source = "settings.json";
+            } catch (const std::exception&) {}
+        }
     }
-    try {
-        std::ifstream f(p);
-        json j = json::parse(f);
-        if (j.contains("steam64_id") && j["steam64_id"].is_number_unsigned())
-            g_steam = std::to_string(j["steam64_id"].get<unsigned long long>());
-        else
-            g_steam = j.value("steam64_id", std::string());
-        g_firstRunMatches = j.value("first_run_matches", 1);
-    }
-    catch (const std::exception& e) {
-        err = std::string("settings.json is not valid: ") + e.what();
-        return false;
-    }
-    if (g_steam.size() != 17 || g_steam.find_first_not_of("0123456789") != std::string::npos) {
-        err = "settings.json: steam64_id must be your 17-digit SteamID64";
+
+    Log("settings loaded from %s", ValidSteam(g_steam) ? source : "nowhere (no valid SteamID64 found)");
+    g_logReady = g_keepLog;                             // KeepLog switched off: no more log lines from here on
+    if (!ValidSteam(g_steam)) {
+        err = "Setup needed: open the SA Mod Manager, select chaomod, click Configure and enter your SteamID64 (17 digits)";
         return false;
     }
     return true;
