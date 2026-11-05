@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ConfigSchema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.sonicretro.org">
+  <Groups>
+    <Group name="General" display="CounterChao">
+      <Property name="SteamID64" display="Your SteamID64" type="string" defaultvalue="">
+        <HelpText>Your 17-digit Steam ID, starting with 7656119. Your Leetify profile must be public.</HelpText>
+      </Property>
+      <Property name="FirstRunMatches" display="Matches to reward on the first run" type="int" defaultvalue="1" minvalue="1" maxvalue="5">
+        <HelpText>How many of your newest matches count the very first time CounterChao runs. 1 means only your latest match.</HelpText>
+      </Property>
+      <Property name="KeepLog" display="Keep a log file" type="bool" defaultvalue="true">
+        <HelpText>Writes CounterChao.log in the mod folder. Useful when reporting a problem.</HelpText>
+      </Property>
+    </Group>
+  </Groups>
+</ConfigSchema>

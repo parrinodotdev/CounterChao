@@ -29,9 +29,9 @@ mod/Release/
 mod/Debug/
 mod/x64/
 mod/.vs/
-mod/my-mod/Release/
-mod/my-mod/Debug/
-mod/my-mod/x64/
+mod/CounterChao/Release/
+mod/CounterChao/Debug/
+mod/CounterChao/x64/
 *.user
 *.obj
 *.pch
