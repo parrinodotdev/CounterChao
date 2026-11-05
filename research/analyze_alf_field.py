@@ -1,4 +1,4 @@
-"""chaomod: test whether the ALF check value (8 bytes at 0xFAA4) behaves like a word-sum or XOR checksum.
+"""CounterChao: test whether the ALF check value (8 bytes at 0xFAA4) behaves like a word-sum or XOR checksum.
 
 For every pair of ALF samples it compares how the field changed with how the rest of the file changed,
 using word sizes 1/2/4/8, both byte orders, and sum or XOR. Prints every combination that holds for ALL pairs.

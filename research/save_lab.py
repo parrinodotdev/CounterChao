@@ -1,6 +1,6 @@
-"""chaomod save lab: snapshot, diff and restore SA2 save files, with a written log.
+"""CounterChao save lab: snapshot, diff and restore SA2 save files, with a written log.
 
-Run from the chaomod folder:
+Run from the CounterChao folder:
   python save_lab.py init                 create lab folders, tidy old files, back up SAVEDATA (verified), snapshot #1
   python save_lab.py snap LABEL [NOTE]    copy the current save files into a numbered snapshot and log it
   python save_lab.py list                 show all snapshots
@@ -74,7 +74,7 @@ def require_closed():
 def log(text):
     LAB.mkdir(exist_ok=True)
     if not LOG.exists():
-        LOG.write_text("# chaomod save lab log\n\n", encoding="utf-8")
+        LOG.write_text("# CounterChao save lab log\n\n", encoding="utf-8")
     with LOG.open("a", encoding="utf-8") as f:
         f.write(f"- {now()}  {text}\n")
 

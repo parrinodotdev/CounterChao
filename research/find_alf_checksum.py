@@ -1,4 +1,4 @@
-"""chaomod: try to identify the checksum in SONIC2B__ALF (8 bytes at 0xFAA4).
+"""CounterChao: try to identify the checksum in SONIC2B__ALF (8 bytes at 0xFAA4).
 
 Reads every unique ALF copy it can find in the lab folder, tries common checksum/hash functions over many
 byte ranges, and prints any combination that reproduces the stored value on EVERY sample. Read-only.

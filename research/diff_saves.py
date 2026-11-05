@@ -1,4 +1,4 @@
-"""chaomod step 3: find where the Chao Garden save stores things, by diffing two copies of it.
+"""CounterChao step 3: find where the Chao Garden save stores things, by diffing two copies of it.
 
 Usage:  python diff_saves.py before.ALF after.ALF
 Prints every byte offset that changed (grouped into runs) with old/new values in decimal and hex.

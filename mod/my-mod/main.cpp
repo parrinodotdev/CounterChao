@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
-#include "chaomod_msg.h"
+#include "CounterChao_msg.h"
 #include "json.hpp"
 #pragma comment(lib, "winhttp.lib")
 
@@ -123,7 +123,7 @@ static void Log(const char* fmt, ...)
     vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
 
-    std::string logPath = g_modDir + "\\chaomod.log";
+    std::string logPath = g_modDir + "\\CounterChao.log";
     SYSTEMTIME t;
     GetLocalTime(&t);
     EnterCriticalSection(&g_logLock);
@@ -148,7 +148,7 @@ static void Say(const char* fmt, ...)
     PrintDebug("%s", msg);                       // game console
     size_t n = strlen(msg);
     while (n && (msg[n - 1] == '\n' || msg[n - 1] == '\r')) msg[--n] = 0;
-    Log("%s", msg);                              // chaomod.log
+    Log("%s", msg);                              // CounterChao.log
 }
 // ---- settings: config.ini (written by the Mod Manager's Configure window), with settings.json as a fallback ----
 static bool g_keepLog = true;
@@ -232,7 +232,7 @@ static bool LoadSettings(std::string& err)
     Log("settings loaded from %s", ValidSteam(g_steam) ? source : "nowhere (no valid SteamID64 found)");
     g_logReady = g_keepLog;                             // KeepLog switched off: no more log lines from here on
     if (!ValidSteam(g_steam)) {
-        err = "Setup needed: open the SA Mod Manager, select chaomod, click Configure and enter your SteamID64 (17 digits)";
+        err = "Setup needed: open the SA Mod Manager, select CounterChao, click Configure and enter your SteamID64 (17 digits)";
         return false;
     }
     return true;
@@ -305,7 +305,7 @@ static DWORD WINAPI NetThread(LPVOID)
     std::wstring path = L"/v3/profile/matches?steam64_id=";
     path += std::wstring(g_steam.begin(), g_steam.end());
 
-    HINTERNET s = WinHttpOpen(L"chaomod/0.3", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    HINTERNET s = WinHttpOpen(L"CounterChao/0.3", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     HINTERNET c = s ? WinHttpConnect(s, L"api-public.cs-prod.leetify.com", INTERNET_DEFAULT_HTTPS_PORT, 0) : NULL;
     HINTERNET r = c ? WinHttpOpenRequest(c, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER,
@@ -405,12 +405,12 @@ extern "C"
 {
     __declspec(dllexport) void __cdecl Init(const char* path, const HelperFunctions& helperFunctions)
     {
-        Say("chaomod: hello (spike 4d: settings + state)\n");
+        Say("CounterChao: hello (spike 4d: settings + state)\n");
         g_modDir = path;
         while (!g_modDir.empty() && (g_modDir.back() == '\\' || g_modDir.back() == '/')) g_modDir.pop_back();
         InitializeCriticalSection(&g_logLock);
         g_logReady = true;
-        Say("chaomod: ---- started ----\n");
+        Say("CounterChao: ---- started ----\n");
         MsgInit(helperFunctions);
 
         std::string err;
@@ -428,7 +428,7 @@ extern "C"
         MsgFrame();
         static bool netReported = false;
         if (!netReported && g_netState == 2) {
-            Say("chaomod: leetify status=%lu bytes=%lu error=%lu %s\n%s",
+            Say("CounterChao: leetify status=%lu bytes=%lu error=%lu %s\n%s",
                 (unsigned long)g_netStatus, (unsigned long)g_netBytes,
                 (unsigned long)g_netError, g_summary, g_report.c_str());
             netReported = true;
@@ -463,12 +463,12 @@ extern "C"
                 items[i].z = -100.0f + (written / 4) * 2.5f;
                 g_state.pending.erase(g_state.pending.begin());
                 written++;
-                Say("chaomod: delivered %s into slot %d\n", NAMES[type], i);
+                Say("CounterChao: delivered %s into slot %d\n", NAMES[type], i);
             }
             if (written) {
                 g_deliveredCount += written;
                 bool saved = SaveState(g_state);
-                Say("chaomod: delivered %d item(s), %d still waiting, state_saved=%d\n",
+                Say("CounterChao: delivered %d item(s), %d still waiting, state_saved=%d\n",
                     written, (int)g_state.pending.size(), saved ? 1 : 0);
                 g_msgShown = true;   // this delivery message replaces the entry message
                 {
@@ -478,10 +478,10 @@ extern "C"
                     if (left > 0) {
                         char more[96];
                         snprintf(more, sizeof(more), "%d more waiting. Free some space and come back to the lobby.", left);
-                        MsgShow(0xFF5EE6B0, "chaomod", head, more);
+                        MsgShow(0xFF5EE6B0, "CounterChao", head, more);
                     }
                     else {
-                        MsgShow(0xFF5EE6B0, "chaomod", head, "Walk into the garden to find them.");
+                        MsgShow(0xFF5EE6B0, "CounterChao", head, "Walk into the garden to find them.");
                     }
                 }
             }
@@ -491,38 +491,38 @@ extern "C"
             int waiting = (int)g_state.pending.size();
             char head[96];
             if (!g_stateReady && g_netStatus == 0 && g_netError == 0) {
-                MsgShow(0xFFFF7B72, "chaomod: setup needed", "Your SteamID64 isn't set up.",
+                MsgShow(0xFFFF7B72, "CounterChao: setup needed", "Your SteamID64 isn't set up.",
                     "Open the SA Mod Manager, select this mod, click Configure and enter your SteamID64.");
             }
             else if (!g_stateReady && g_netStatus == 0) {
-                MsgShow(0xFFFF7B72, "chaomod: can't reach Leetify", "No connection to Leetify.",
-                    "Check your internet and restart the game. Details are in chaomod.log.");
+                MsgShow(0xFFFF7B72, "CounterChao: can't reach Leetify", "No connection to Leetify.",
+                    "Check your internet and restart the game. Details are in CounterChao.log.");
             }
             else if (!g_stateReady && g_netStatus != 200) {
-                MsgShow(0xFFFF7B72, "chaomod: no matches found", "Leetify didn't return your matches.",
+                MsgShow(0xFFFF7B72, "CounterChao: no matches found", "Leetify didn't return your matches.",
                     "Check your SteamID64 in Configure and make sure your Leetify profile is public.");
             }
             else if (!g_stateReady) {
-                MsgShow(0xFFFF7B72, "chaomod: something went wrong", "chaomod couldn't save its state.",
-                    "Nothing was delivered. Details are in chaomod.log.");
+                MsgShow(0xFFFF7B72, "CounterChao: something went wrong", "CounterChao couldn't save its state.",
+                    "Nothing was delivered. Details are in CounterChao.log.");
             }
             else if (g_deliveredCount > 0) {
                 snprintf(head, sizeof(head), "%d item%s delivered.", g_deliveredCount, g_deliveredCount == 1 ? "" : "s");
                 if (waiting > 0) {
                     char more[96];
                     snprintf(more, sizeof(more), "%d more waiting. Free some space and come back to the lobby.", waiting);
-                    MsgShow(0xFF5EE6B0, "chaomod", head, more);
+                    MsgShow(0xFF5EE6B0, "CounterChao", head, more);
                 }
                 else {
-                    MsgShow(0xFF5EE6B0, "chaomod", head, "Walk into the garden to find them.");
+                    MsgShow(0xFF5EE6B0, "CounterChao", head, "Walk into the garden to find them.");
                 }
             }
             else if (waiting > 0) {
                 snprintf(head, sizeof(head), "%d item%s waiting.", waiting, waiting == 1 ? "" : "s");
-                MsgShow(0xFFFFC857, "chaomod", head, "Your garden is full. Use or feed some items, then come back to the lobby.");
+                MsgShow(0xFFFFC857, "CounterChao", head, "Your garden is full. Use or feed some items, then come back to the lobby.");
             }
             else {
-                MsgShow(0xFF6CB6FF, "chaomod", "No new matches.", "Play a CS2 match, let Leetify pick it up, then restart the game.");
+                MsgShow(0xFF6CB6FF, "CounterChao", "No new matches.", "Play a CS2 match, let Leetify pick it up, then restart the game.");
             }
         }
 
@@ -531,7 +531,7 @@ extern "C"
             ok, freeSlots, (int)GameState, (int)CurrentLevel,
             (int)CurrentChaoArea, (int)LastChaoArea, (int)NextChaoArea, types);
         if (strcmp(line, last) != 0) {
-            Say("chaomod: %s\n", line);
+            Say("CounterChao: %s\n", line);
             strcpy_s(last, line);
         }
     }

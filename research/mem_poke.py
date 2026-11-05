@@ -1,4 +1,4 @@
-"""chaomod: write bytes into the running game's in-memory Chao save (the image find_base.py located).
+"""CounterChao: write bytes into the running game's in-memory Chao save (the image find_base.py located).
 
 Usage (game open, standing in the Chao Garden):
     python mem_poke.py OFFSET HEXBYTES

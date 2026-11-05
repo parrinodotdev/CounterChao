@@ -1,4 +1,4 @@
-# chaomod
+# CounterChao
 
 Kills, headshots, flashes and multi-kills become Chaos Drives and animals that appear in your garden!
 After 25 years of replaying City Escape, we're playing Counter-Strike 2 to feed the colony.
@@ -29,7 +29,7 @@ Look up your SteamID64 at steamid.io. You can request a key from Leetify's API p
 
 ## Usage
 1. Start SA2, go to Stage Select -> Chao Garden, stand in the Chao World lobby.
-2. Run `python -m chaomod`. Add `--plan` to preview rewards without touching the game.
+2. Run `python -m counterchao`. Add `--plan` to preview rewards without touching the game.
 3. Answer `y` when asked if you're in the lobby (injection happens here but the game won't react immediately)
 4. Walk into the garden, rewards should be spawned on the ground.
 
@@ -39,10 +39,10 @@ Matches are rewarded once. If your garden's 10 item slots are full, leftovers wa
 Edit rewards.json: stat-to-items rates, animal pools, rare drops, minimum rounds to register match, per-match caps
 
 ## How it works
-The game keeps the whole Chao save in memory while you're in the Chao World. chaomod writes item records into the free slots of that image, and the game saves them normally when you leave.
+The game keeps the whole Chao save in memory while you're in the Chao World. CounterChao writes item records into the free slots of that image, and the game saves them normally when you leave.
 
 ## Security
-Writes only to the running game's memory, chaomod never saves files on your disk. No admin rights needed. Talks only to Leetify by sending your API key and SteamID64. No SEGA files are included in this project.
+Writes only to the running game's memory, CounterChao never saves files on your disk. No admin rights needed. Talks only to Leetify by sending your API key and SteamID64. No SEGA files are included in this project.
 
 ## Current limitations :(
 Windows only. It cannot currently tell whether the lobby is loaded, so it asks you.

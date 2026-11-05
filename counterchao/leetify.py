@@ -14,7 +14,7 @@ class LeetifyError(Exception):
 def build_request(key, steam64):
     """The API key is optional: the header is only sent when a key is given."""
     url = f"{API}/v3/profile/matches?{urllib.parse.urlencode({'steam64_id': steam64})}"
-    headers = {"User-Agent": "chaomod/0.2"}
+    headers = {"User-Agent": "CounterChao/0.2"}
     if key:
         headers["_leetify_key"] = key
     return urllib.request.Request(url, headers=headers)

@@ -1,4 +1,4 @@
-# chaomod clean-slate run
+# CounterChao clean-slate run
 
 Rule: after every step, run `python save_lab.py snap <label> "what I just did"`.
 Snapshots work while the game is open. `clear` and `restore` need the game fully closed.

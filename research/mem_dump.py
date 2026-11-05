@@ -1,4 +1,4 @@
-"""chaomod: show bytes of the live Chao save image in the running game's memory. READ-ONLY.
+"""CounterChao: show bytes of the live Chao save image in the running game's memory. READ-ONLY.
 
 Usage (game open, Chao save loaded):
     python mem_dump.py OFFSET LENGTH [--records]

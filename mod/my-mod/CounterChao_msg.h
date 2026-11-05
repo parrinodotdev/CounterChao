@@ -1,4 +1,4 @@
-// chaomod_msg.h - Tier 1 on-screen message (debug-text based), v2.
+// CounterChao_msg.h - Tier 1 on-screen message (debug-text based), v2.
 // Include AFTER pch.h / SA2ModLoader.h in main.cpp.
 // Same API as v1: MsgInit(helpers), MsgShow(argb,title,line1,line2), MsgFrame().
 #pragma once

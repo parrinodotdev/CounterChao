@@ -1,7 +1,7 @@
 # personal data
 config.json
 config.ini
-chaomod_state.json
+counterchao_state.json
 
 # research workspace
 lab/
@@ -44,5 +44,5 @@ mod/my-mod/x64/
 # mod runtime files, which live in the game's mods folder, listed in case they get copied
 settings.json
 state.json
-chaomod.log
-chaomod.log.old
+CounterChao.log
+CounterChao.log.old

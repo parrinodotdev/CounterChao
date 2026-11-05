@@ -1,4 +1,4 @@
-"""Command-line entry point: python -m chaomod [--plan | --replay N | --yes] [--config PATH]"""
+"""Command-line entry point: python -m counterchao [--plan | --replay N | --yes] [--config PATH]"""
 import argparse
 import json
 import sys
@@ -19,13 +19,13 @@ def load_json(path, what):
 
 
 def parse_args(argv):
-    p = argparse.ArgumentParser(prog="chaomod", description=__doc__)
+    p = argparse.ArgumentParser(prog="counterchao", description=__doc__)
     p.add_argument("--plan", action="store_true", help="show what would be given; touch nothing")
     p.add_argument("--replay", type=int, default=0, metavar="N", help="TEST: reward the latest N matches, save no state")
     p.add_argument("--yes", action="store_true", help='skip the "are you in the lobby?" question')
     p.add_argument("--config", default=str(ROOT / "config.json"))
     p.add_argument("--rules", default=str(ROOT / "rewards.json"))
-    p.add_argument("--state", default=str(ROOT / "chaomod_state.json"))
+    p.add_argument("--state", default=str(ROOT / "counterchao_state.json"))
     p.add_argument("--give", nargs="+", metavar="ITEM", help="TEST: deliver these items (name or id), skip Leetify")
     return p.parse_args(argv)
 

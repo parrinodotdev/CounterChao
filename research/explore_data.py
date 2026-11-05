@@ -1,7 +1,7 @@
-"""chaomod step 2: (a) summarize your last 100 matches so reward thresholds can be calibrated,
+"""CounterChao step 2: (a) summarize your last 100 matches so reward thresholds can be calibrated,
 (b) find out whether match-detail data includes clutches / bomb plants / defuses.
 
-Run from the chaomod folder:  python explore_data.py
+Run from the CounterChao folder:  python explore_data.py
 Saves: history_summary.txt, match_detail_sample.json (if a detail endpoint works)
 """
 import json
@@ -16,7 +16,7 @@ BASE = "https://api-public.cs-prod.leetify.com"
 
 def get(path, params, key):
     url = f"{BASE}{path}" + (f"?{urllib.parse.urlencode(params)}" if params else "")
-    req = urllib.request.Request(url, headers={"_leetify_key": key, "User-Agent": "chaomod/0.1"})
+    req = urllib.request.Request(url, headers={"_leetify_key": key, "User-Agent": "CounterChao/0.1"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             return r.status, json.load(r)

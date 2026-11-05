@@ -1,6 +1,6 @@
-"""chaomod step 1: confirm the Leetify API works and see what a match looks like.
+"""CounterChao step 1: confirm the Leetify API works and see what a match looks like.
 
-Usage (PowerShell, from the chaomod folder):
+Usage (PowerShell, from the CounterChao folder):
     copy config.example.json config.json   # then paste your key + steam id into config.json
     python fetch_last_match.py
 
@@ -25,7 +25,7 @@ def load_config():
 
 def get(path, params, key):
     url = f"{BASE}{path}?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(url, headers={"_leetify_key": key, "User-Agent": "chaomod/0.1"})
+    req = urllib.request.Request(url, headers={"_leetify_key": key, "User-Agent": "CounterChao/0.1"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             return r.status, json.load(r)

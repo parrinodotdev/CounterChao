@@ -1,4 +1,4 @@
-"""chaomod: find where the running game keeps its Chao Garden save data in memory. READ-ONLY, writes nothing.
+"""CounterChao: find where the running game keeps its Chao Garden save data in memory. READ-ONLY, writes nothing.
 
 Run while the game is open and you are standing inside the Chao Garden (the game loads the Chao save then):
     python find_base.py

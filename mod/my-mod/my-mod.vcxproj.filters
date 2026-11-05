@@ -21,7 +21,7 @@
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="chaomod_msg.h">
+    <ClInclude Include="CounterChao_msg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

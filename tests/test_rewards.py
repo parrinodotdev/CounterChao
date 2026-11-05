@@ -6,8 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from chaomod import layout, leetify, rewards  # noqa: E402
-from chaomod.items import ANIMALS, BY_NAME, parse_type  # noqa: E402
+from counterchao import layout, leetify, rewards  # noqa: E402
+from counterchao.items import ANIMALS, BY_NAME, parse_type  # noqa: E402
 
 RULES = json.loads((ROOT / "rewards.json").read_text(encoding="utf-8"))
 
