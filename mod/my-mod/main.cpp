@@ -109,6 +109,7 @@ static std::string g_modDir;
 static std::string g_steam;
 static int g_firstRunMatches = 1;
 static bool g_msgShown = false;      // entry message already shown this launch
+static int g_deliveredCount = 0;     // items written this launch
 // ---- log file (safe to use from any thread) and Say(): console + log in one call ----
 static CRITICAL_SECTION g_logLock;
 static bool g_logReady = false;
@@ -465,6 +466,7 @@ extern "C"
                 Say("chaomod: delivered %s into slot %d\n", NAMES[type], i);
             }
             if (written) {
+                g_deliveredCount += written;
                 bool saved = SaveState(g_state);
                 Say("chaomod: delivered %d item(s), %d still waiting, state_saved=%d\n",
                     written, (int)g_state.pending.size(), saved ? 1 : 0);
@@ -473,12 +475,41 @@ extern "C"
         if (inLobby && !g_msgShown && g_netState == 2) {
             g_msgShown = true;
             int waiting = (int)g_state.pending.size();
-            if (g_state.pending.empty() && g_stateReady)
+            char head[96];
+            if (!g_stateReady && g_netStatus == 0 && g_netError == 0) {
+                MsgShow(0xFFFF7B72, "chaomod: setup needed", "Your SteamID64 isn't set up.",
+                    "Open the SA Mod Manager, select this mod, click Configure and enter your SteamID64.");
+            }
+            else if (!g_stateReady && g_netStatus == 0) {
+                MsgShow(0xFFFF7B72, "chaomod: can't reach Leetify", "No connection to Leetify.",
+                    "Check your internet and restart the game. Details are in chaomod.log.");
+            }
+            else if (!g_stateReady && g_netStatus != 200) {
+                MsgShow(0xFFFF7B72, "chaomod: no matches found", "Leetify didn't return your matches.",
+                    "Check your SteamID64 in Configure and make sure your Leetify profile is public.");
+            }
+            else if (!g_stateReady) {
+                MsgShow(0xFFFF7B72, "chaomod: something went wrong", "chaomod couldn't save its state.",
+                    "Nothing was delivered. Details are in chaomod.log.");
+            }
+            else if (g_deliveredCount > 0) {
+                snprintf(head, sizeof(head), "%d item%s delivered.", g_deliveredCount, g_deliveredCount == 1 ? "" : "s");
+                if (waiting > 0) {
+                    char more[96];
+                    snprintf(more, sizeof(more), "%d more waiting. Free some space and come back to the lobby.", waiting);
+                    MsgShow(0xFF5EE6B0, "chaomod", head, more);
+                }
+                else {
+                    MsgShow(0xFF5EE6B0, "chaomod", head, "Walk into the garden to find them.");
+                }
+            }
+            else if (waiting > 0) {
+                snprintf(head, sizeof(head), "%d item%s waiting.", waiting, waiting == 1 ? "" : "s");
+                MsgShow(0xFFFFC857, "chaomod", head, "Your garden is full. Use or feed some items, then come back to the lobby.");
+            }
+            else {
                 MsgShow(0xFF6CB6FF, "chaomod", "No new matches.", "Play a CS2 match, let Leetify pick it up, then restart the game.");
-            else if (waiting > 0 && freeSlots == 0)
-                MsgShow(0xFFFFC857, "chaomod: items waiting", "Your garden is full.", "Use or feed some items, then come back to the lobby.");
-            else
-                MsgShow(0xFF5EE6B0, "chaomod", "Items delivered.", "Walk into the garden to find them.");
+            }
         }
 
         char line[256];
