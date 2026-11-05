@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include "chaomod_msg.h"
 #include "json.hpp"
 #pragma comment(lib, "winhttp.lib")
 
@@ -107,6 +108,7 @@ static std::string Describe(const std::vector<int>& items)
 static std::string g_modDir;
 static std::string g_steam;
 static int g_firstRunMatches = 1;
+static bool g_msgShown = false;      // entry message already shown this launch
 // ---- log file (safe to use from any thread) and Say(): console + log in one call ----
 static CRITICAL_SECTION g_logLock;
 static bool g_logReady = false;
@@ -408,6 +410,7 @@ extern "C"
         InitializeCriticalSection(&g_logLock);
         g_logReady = true;
         Say("chaomod: ---- started ----\n");
+        MsgInit(helperFunctions);
 
         std::string err;
         if (!LoadSettings(err)) {
@@ -421,6 +424,7 @@ extern "C"
 
     __declspec(dllexport) void __cdecl OnFrame()
     {
+        MsgFrame();
         static bool netReported = false;
         if (!netReported && g_netState == 2) {
             Say("chaomod: leetify status=%lu bytes=%lu error=%lu %s\n%s",
@@ -465,6 +469,16 @@ extern "C"
                 Say("chaomod: delivered %d item(s), %d still waiting, state_saved=%d\n",
                     written, (int)g_state.pending.size(), saved ? 1 : 0);
             }
+        }
+        if (inLobby && !g_msgShown && g_netState == 2) {
+            g_msgShown = true;
+            int waiting = (int)g_state.pending.size();
+            if (g_state.pending.empty() && g_stateReady)
+                MsgShow(0xFF6CB6FF, "chaomod", "No new matches.", "Play a CS2 match, let Leetify pick it up, then restart the game.");
+            else if (waiting > 0 && freeSlots == 0)
+                MsgShow(0xFFFFC857, "chaomod: items waiting", "Your garden is full.", "Use or feed some items, then come back to the lobby.");
+            else
+                MsgShow(0xFF5EE6B0, "chaomod", "Items delivered.", "Walk into the garden to find them.");
         }
 
         char line[256];
