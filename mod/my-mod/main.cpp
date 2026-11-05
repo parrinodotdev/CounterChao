@@ -470,6 +470,20 @@ extern "C"
                 bool saved = SaveState(g_state);
                 Say("chaomod: delivered %d item(s), %d still waiting, state_saved=%d\n",
                     written, (int)g_state.pending.size(), saved ? 1 : 0);
+                g_msgShown = true;   // this delivery message replaces the entry message
+                {
+                    char head[96];
+                    int left = (int)g_state.pending.size();
+                    snprintf(head, sizeof(head), "%d item%s delivered.", written, written == 1 ? "" : "s");
+                    if (left > 0) {
+                        char more[96];
+                        snprintf(more, sizeof(more), "%d more waiting. Free some space and come back to the lobby.", left);
+                        MsgShow(0xFF5EE6B0, "chaomod", head, more);
+                    }
+                    else {
+                        MsgShow(0xFF5EE6B0, "chaomod", head, "Walk into the garden to find them.");
+                    }
+                }
             }
         }
         if (inLobby && !g_msgShown && g_netState == 2) {
