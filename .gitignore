@@ -1,3 +1,5 @@
+dist/
+
 # personal data
 config.json
 config.ini
