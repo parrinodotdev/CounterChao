@@ -71,6 +71,9 @@ Been away a while? Only your 3 newest matches count. Older ones are skipped.
 Windows 11's Smart App Control is blocking the mod. Your saves are fine.
 The only fix I know of is turning Smart App Control off (Windows Security -> App \& browser control -> Smart App Control settings).
 
+**Windows Defender shows a "security scan" pop-up the first time.**
+Normal for a new download. It passes after a few seconds.
+
 ## Privacy and security
 
 The mod sends your SteamID64 to Leetify's public API over HTTPS, once per game launch, and nothing else. No API key is needed. It never shows or changes any Leetify numbers; it only uses your stats to decide rewards.
