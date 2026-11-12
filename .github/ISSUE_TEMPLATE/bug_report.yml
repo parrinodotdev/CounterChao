@@ -1,0 +1,57 @@
+name: Bug report
+description: Something broke or confused you
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, and what the game did.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: false
+  - type: dropdown
+    id: message
+    attributes:
+      label: Which message showed up in the Chao World lobby?
+      options:
+        - N items delivered
+        - N items waiting
+        - No new matches
+        - Setup needed
+        - No matches found
+        - Can't reach Leetify
+        - Unexpected reply
+        - State file problem
+        - Something went wrong
+        - No message at all
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: CounterChao.log
+      description: Drag the file in here. It's in your SA2 folder under mods, then CounterChao.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11
+    validations:
+      required: false
+  - type: input
+    id: mods
+    attributes:
+      label: Other mods ticked in the SA Mod Manager
+      placeholder: None
+    validations:
+      required: false
