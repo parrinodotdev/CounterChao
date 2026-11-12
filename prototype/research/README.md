@@ -1,6 +1,6 @@
 # research/
 
-Tools used to work out the save format. Not needed to run CounterChao. Run from the repo root, e.g.
+Tools used to work out the save format. Not needed to run CounterChao. Run from the prototype folder, e.g.
 `python research/save_lab.py init`. They write to `lab/` (gitignored). Game must be closed for anything that
 edits save files; the memory tools need the game open.
 

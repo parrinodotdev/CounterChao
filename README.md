@@ -90,12 +90,12 @@ In its own mod folder the mod keeps three small files: `config.ini` (your settin
 ## Python prototype (deprecated)
 
 <details>
-<summary>The first version was a Python script. It's kept here as a proof of concept and isn't maintained.</summary>
+<summary>The first version was a Python script. It's kept in the prototype folder as a proof of concept and isn't maintained.</summary>
 It worked by writing into the running game's memory from outside. It needed Python 3 and asked you to confirm you were standing in the lobby.
 
-1. Copy `config.example.json` to `config.json` and fill in your SteamID64 (keep it private; the API key is optional).
+1. In the `prototype` folder, copy `config.example.json` to `config.json` and fill in your SteamID64 (keep it private; the API key is optional).
 2. Start SA2 and stand in the Chao World lobby.
-3. Run `python -m counterchao`. Add `--plan` to preview rewards without touching the game.
+3. Run `python -m counterchao` from that folder. Add `--plan` to preview rewards without touching the game.
 4. Edit `rewards.json` to change the rates, animal pools, rare drops and caps.
 
 </details>
