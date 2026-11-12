@@ -34,6 +34,7 @@ Found a bug or something confusing? Please open an issue.
 2. Start SA2 and go to Stage Select -> Chao Garden, then into the Chao World lobby.
 3. A message shows up for a few seconds telling you what happened (see Messages below).
 4. Walk into the garden. Your items are there!
+5. Leave through the lobby teleporter before you quit (that's when the game saves, then you're safe to ALT+F4)
 
 The mod checks Leetify once, when the game starts. If you play a match while the game is open, restart the game to pick it up.
 Matches are rewarded once. If your garden's 10 item slots are full, the leftovers wait, and they show up the next time you walk through the lobby with free slots.
