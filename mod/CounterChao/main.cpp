@@ -20,7 +20,7 @@
 #pragma comment(lib, "winhttp.lib")
 
 using json = nlohmann::json;
-static const char* VERSION = "0.2.0-dev";
+static const char* VERSION = "0.2.0-beta";
 
 struct ChaoItem {
     uint16_t type;
