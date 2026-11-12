@@ -49,7 +49,7 @@ The first time you run it, only your latest match counts, so you don't get a mou
 * **Rare animals**: a standout match can drop one
 
 A match needs at least 10 rounds to count, a match gives at most 10 items, and up to 3 new matches are rewarded each time you start the game.
-If more than 3 new matches piled up since your last launch (say, after a long break), only the 3 newest are rewarded. The older ones are skipped for good.
+Been away a while? Only your 3 newest matches count. Older ones are skipped.
 
 ## Messages
 
@@ -60,15 +60,15 @@ If more than 3 new matches piled up since your last launch (say, after a long br
 |**No new matches**|Play a CS2 match, let Leetify pick it up, then restart the game.|
 |**Setup needed**|Open Configure in the Mod Manager and enter your SteamID64.|
 |**No matches found**|Check your SteamID64 in Configure and make sure your Leetify profile is public.|
-|**Can't reach Leetify**|Check your internet connection and restart the game. Items that were already waiting still get delivered.|
-|**Unexpected reply**|Leetify answered with something the mod couldn't read. Try again later.|
-|**State file problem**|`state.json` in the mod folder couldn't be read. Nothing was delivered or changed. See `CounterChao.log` in the mod folder.|
-|**Something went wrong**|The mod couldn't save its state. Nothing was delivered. See `CounterChao.log` in the mod folder.|
+|**Can't reach Leetify**|Check your internet and restart the game. Waiting items still show up.|
+|**Unexpected reply**|Leetify sent something weird. Try again later.|
+|**State file problem**|`state.json` couldn't be read. Nothing was delivered. Check `CounterChao.log`.|
+|**Something went wrong**|Couldn't save. Nothing was delivered. Check `CounterChao.log`.|
 
 ## Troubleshooting
 
 **"An Application Control policy has blocked this file" or a "Bad Image" error (0xc0e90002) when the game starts.**
-That's Smart App Control on Windows 11 blocking the mod's DLL, because the DLL isn't code-signed. The game still runs, just without the mod, and your saves aren't touched.
+Windows 11's Smart App Control is blocking the mod. Your saves are fine.
 The only fix I know of is turning Smart App Control off (Windows Security -> App \& browser control -> Smart App Control settings).
 
 ## Privacy and security
