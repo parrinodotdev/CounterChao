@@ -125,7 +125,7 @@ def json_notice():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", default="0.1.0-beta")
+    ap.add_argument("--version", required=True)
     ap.add_argument("--dll", default=None)
     args = ap.parse_args()
 
