@@ -14,11 +14,13 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <stdexcept>
 #include "CounterChao_msg.h"
 #include "json.hpp"
 #pragma comment(lib, "winhttp.lib")
 
 using json = nlohmann::json;
+static const char* VERSION = "0.1.0-beta";
 
 struct ChaoItem {
     uint16_t type;
@@ -290,6 +292,20 @@ static std::string g_report;             // same
 static State g_state;                    // the live copy of state.json, used by the game thread for delivery
 static volatile LONG g_stateReady = 0;   // 1 once g_state is trustworthy and saved
 
+// what happened this launch; decides which lobby message is shown
+enum Outcome : LONG {
+    OUT_NONE = 0,
+    OUT_OK,           // Leetify answered, state saved
+    OUT_SETUP,        // no valid SteamID64
+    OUT_STATE_BAD,    // state.json exists but can't be read
+    OUT_NET_FAIL,     // no HTTP response at all
+    OUT_HTTP_ERR,     // HTTP response other than 200
+    OUT_NO_MATCHES,   // 200 with an empty match list
+    OUT_PARSE,        // 200 but the reply wasn't the JSON we expect
+    OUT_SAVE_FAIL     // couldn't write state.json
+};
+static volatile LONG g_outcome = OUT_NONE;   // written before g_netState becomes 2
+
 static DWORD WINAPI NetThread(LPVOID)
 {
     InterlockedExchange(&g_netState, 1);
@@ -298,6 +314,7 @@ static DWORD WINAPI NetThread(LPVOID)
     std::string err;
     if (!LoadState(state, err)) {
         snprintf(g_summary, sizeof(g_summary), "%s", err.c_str());
+        InterlockedExchange(&g_outcome, OUT_STATE_BAD);
         InterlockedExchange(&g_netState, 2);
         return 0;
     }
@@ -305,7 +322,7 @@ static DWORD WINAPI NetThread(LPVOID)
     std::wstring path = L"/v3/profile/matches?steam64_id=";
     path += std::wstring(g_steam.begin(), g_steam.end());
 
-    HINTERNET s = WinHttpOpen(L"CounterChao/0.3", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    HINTERNET s = WinHttpOpen(L"CounterChao/0.1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     HINTERNET c = s ? WinHttpConnect(s, L"api-public.cs-prod.leetify.com", INTERNET_DEFAULT_HTTPS_PORT, 0) : NULL;
     HINTERNET r = c ? WinHttpOpenRequest(c, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER,
@@ -334,9 +351,11 @@ static DWORD WINAPI NetThread(LPVOID)
     if (c) WinHttpCloseHandle(c);
     if (s) WinHttpCloseHandle(s);
 
+    LONG outcome = OUT_NET_FAIL;
     if (g_netStatus == 200) {
         try {
             json j = json::parse(body);
+            if (!j.is_array()) throw std::runtime_error("reply is not a list of matches");
             int total = (int)j.size();
             if (total > 0) {
                 // 1. which matches are new?  (newest first)
@@ -383,6 +402,7 @@ static DWORD WINAPI NetThread(LPVOID)
                 if (ns.processed.size() > 1000) ns.processed.resize(1000);
                 bool saved = SaveState(ns);
                 if (saved) { g_state = ns; InterlockedExchange(&g_stateReady, 1); }
+                outcome = saved ? OUT_OK : OUT_SAVE_FAIL;
 
                 report += "  waiting for delivery: " + Describe(pending) + "\n";
                 snprintf(g_summary, sizeof(g_summary), "matches=%d first_run=%d new_matches=%d pending=%d state_saved=%d",
@@ -390,13 +410,26 @@ static DWORD WINAPI NetThread(LPVOID)
                 g_report = report;
             }
             else {
+                outcome = OUT_NO_MATCHES;
                 snprintf(g_summary, sizeof(g_summary), "leetify returned no matches");
             }
         }
         catch (const std::exception& e) {
+            outcome = OUT_PARSE;
             snprintf(g_summary, sizeof(g_summary), "parse error: %.200s", e.what());
         }
     }
+    else if (g_netStatus != 0) {
+        outcome = OUT_HTTP_ERR;
+    }
+
+    // Leetify gave us nothing usable, but state.json loaded fine:
+    // items that were already waiting can still be delivered.
+    if (outcome != OUT_OK && outcome != OUT_SAVE_FAIL && state.exists) {
+        g_state = state;
+        InterlockedExchange(&g_stateReady, 1);
+    }
+    InterlockedExchange(&g_outcome, outcome);
     InterlockedExchange(&g_netState, 2);
     return 0;
 }
@@ -405,17 +438,17 @@ extern "C"
 {
     __declspec(dllexport) void __cdecl Init(const char* path, const HelperFunctions& helperFunctions)
     {
-        Say("CounterChao: hello (spike 4d: settings + state)\n");
         g_modDir = path;
         while (!g_modDir.empty() && (g_modDir.back() == '\\' || g_modDir.back() == '/')) g_modDir.pop_back();
         InitializeCriticalSection(&g_logLock);
         g_logReady = true;
-        Say("CounterChao: ---- started ----\n");
+        Say("CounterChao v%s ---- started ----\n", VERSION);
         MsgInit(helperFunctions);
 
         std::string err;
         if (!LoadSettings(err)) {
             snprintf(g_summary, sizeof(g_summary), "%s", err.c_str());
+            InterlockedExchange(&g_outcome, OUT_SETUP);
             InterlockedExchange(&g_netState, 2);
             return;
         }
@@ -428,9 +461,9 @@ extern "C"
         MsgFrame();
         static bool netReported = false;
         if (!netReported && g_netState == 2) {
-            Say("CounterChao: leetify status=%lu bytes=%lu error=%lu %s\n%s",
+            Say("CounterChao: leetify status=%lu bytes=%lu error=%lu outcome=%ld %s\n%s",
                 (unsigned long)g_netStatus, (unsigned long)g_netBytes,
-                (unsigned long)g_netError, g_summary, g_report.c_str());
+                (unsigned long)g_netError, (long)g_outcome, g_summary, g_report.c_str());
             netReported = true;
         }
 
@@ -490,19 +523,32 @@ extern "C"
             g_msgShown = true;
             int waiting = (int)g_state.pending.size();
             char head[96];
-            if (!g_stateReady && g_netStatus == 0 && g_netError == 0) {
+            LONG outcome = g_outcome;
+            if (outcome == OUT_SETUP) {
                 MsgShow(0xFFFF7B72, "CounterChao: setup needed", "Your SteamID64 isn't set up.",
                     "Open the SA Mod Manager, select this mod, click Configure and enter your SteamID64.");
             }
-            else if (!g_stateReady && g_netStatus == 0) {
+            else if (outcome == OUT_STATE_BAD) {
+                MsgShow(0xFFFF7B72, "CounterChao: state file problem", "state.json couldn't be read.",
+                    "Nothing was changed or delivered. Details are in CounterChao.log.");
+            }
+            else if (outcome == OUT_NET_FAIL) {
                 MsgShow(0xFFFF7B72, "CounterChao: can't reach Leetify", "No connection to Leetify.",
                     "Check your internet and restart the game. Details are in CounterChao.log.");
             }
-            else if (!g_stateReady && g_netStatus != 200) {
+            else if (outcome == OUT_HTTP_ERR) {
                 MsgShow(0xFFFF7B72, "CounterChao: no matches found", "Leetify didn't return your matches.",
                     "Check your SteamID64 in Configure and make sure your Leetify profile is public.");
             }
-            else if (!g_stateReady) {
+            else if (outcome == OUT_NO_MATCHES) {
+                MsgShow(0xFFFF7B72, "CounterChao: no matches found", "Leetify has no matches for this SteamID64.",
+                    "Check your SteamID64 in Configure and make sure your Leetify profile is public.");
+            }
+            else if (outcome == OUT_PARSE) {
+                MsgShow(0xFFFF7B72, "CounterChao: unexpected reply", "Leetify's reply couldn't be read.",
+                    "Try again later. Details are in CounterChao.log.");
+            }
+            else if (outcome == OUT_SAVE_FAIL) {
                 MsgShow(0xFFFF7B72, "CounterChao: something went wrong", "CounterChao couldn't save its state.",
                     "Nothing was delivered. Details are in CounterChao.log.");
             }
