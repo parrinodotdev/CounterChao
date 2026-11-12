@@ -11,6 +11,9 @@
       <Property name="KeepLog" display="Keep a log file" type="bool" defaultvalue="true">
         <HelpText>Writes CounterChao.log in the mod folder. Useful when reporting a problem.</HelpText>
       </Property>
+      <Property name="CloseAfterSave" display="Close the game after saving" type="bool" defaultvalue="false">
+        <HelpText>When you leave Chao World through the lobby teleporter, CounterChao waits for the save to finish, then closes the game.</HelpText>
+      </Property>
     </Group>
   </Groups>
 </ConfigSchema>

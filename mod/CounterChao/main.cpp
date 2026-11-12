@@ -20,7 +20,7 @@
 #pragma comment(lib, "winhttp.lib")
 
 using json = nlohmann::json;
-static const char* VERSION = "0.1.0-beta";
+static const char* VERSION = "0.2.0-dev";
 
 struct ChaoItem {
     uint16_t type;
@@ -154,6 +154,7 @@ static void Say(const char* fmt, ...)
 }
 // ---- settings: config.ini (written by the Mod Manager's Configure window), with settings.json as a fallback ----
 static bool g_keepLog = true;
+static bool g_closeAfterSave = false;   // quick exit, off unless ticked in Configure
 static std::map<std::string, std::string> g_ini;   // "section|key" in lower case -> value
 
 static std::string Trim(const std::string& s)
@@ -213,6 +214,7 @@ static bool LoadSettings(std::string& err)
     if (IniGet("SteamID64", v)) g_steam = Trim(v);
     if (IniGet("FirstRunMatches", v)) g_firstRunMatches = atoi(v.c_str());
     if (IniGet("KeepLog", v)) g_keepLog = (Lower(v) == "true" || v == "1");
+    if (IniGet("CloseAfterSave", v)) g_closeAfterSave = (Lower(v) == "true" || v == "1");
     if (ValidSteam(g_steam)) source = "config.ini";
 
     if (!ValidSteam(g_steam)) {                         // fall back to our own testing file
@@ -232,6 +234,7 @@ static bool LoadSettings(std::string& err)
     }
 
     Log("settings loaded from %s", ValidSteam(g_steam) ? source : "nowhere (no valid SteamID64 found)");
+    Log("quick exit (close the game after saving): %s", g_closeAfterSave ? "on" : "off");
     g_logReady = g_keepLog;                             // KeepLog switched off: no more log lines from here on
     if (!ValidSteam(g_steam)) {
         err = "Setup needed: open the SA Mod Manager, select CounterChao, click Configure and enter your SteamID64 (17 digits)";
@@ -434,6 +437,123 @@ static DWORD WINAPI NetThread(LPVOID)
     return 0;
 }
 
+// ---- quick exit: once the Chao World exit teleporter has saved, close the game. Off unless ticked in Configure. ----
+// It never closes the game unless it has seen a fresh Chao save file on disk, and no save file has been written for 3 seconds.
+enum { QX_IDLE, QX_IN_CHAO, QX_WAIT_SAVE, QX_CLOSING, QX_DONE };
+static int g_qx = QX_IDLE;
+static ULONGLONG g_qxLeftTick = 0, g_qxCloseTick = 0;   // GetTickCount64 values
+static ULONGLONG g_qxLeftTime = 0, g_qxLastNewest = 0, g_qxLastAlf = 0;    // file times
+
+static ULONGLONG FtToU64(const FILETIME& ft) { return ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime; }
+
+// Last-write times of the save files: the Chao save (SONIC2B__ALF) and the newest of all SONIC2B__* files.
+static bool SaveTimes(ULONGLONG& alf, ULONGLONG& newest)
+{
+    alf = 0; newest = 0;
+    char exe[MAX_PATH];
+    DWORD n = GetModuleFileNameA(NULL, exe, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return false;
+    std::string dir(exe);
+    size_t slash = dir.find_last_of("\\/");
+    if (slash == std::string::npos) return false;
+    dir = dir.substr(0, slash) + "\\resource\\gd_PC\\SAVEDATA\\";
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA((dir + "SONIC2B__*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        WIN32_FILE_ATTRIBUTE_DATA fa;
+        if (!GetFileAttributesExA((dir + fd.cFileName).c_str(), GetFileExInfoStandard, &fa)) continue;
+        ULONGLONG t = FtToU64(fa.ftLastWriteTime);
+        if (t > newest) newest = t;
+        if (_stricmp(fd.cFileName, "SONIC2B__ALF") == 0) alf = t;
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return alf != 0;
+}
+
+static BOOL CALLBACK QxFindWindow(HWND w, LPARAM out)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(w) || GetWindow(w, GW_OWNER)) return TRUE;
+    *(HWND*)out = w;
+    return FALSE;
+}
+
+// Called about twice a second from OnFrame.
+static void QuickExitTick()
+{
+    if (!g_closeAfterSave || g_qx == QX_DONE) return;
+    bool inChao = (int)CurrentLevel == 90;
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG alf = 0, newest = 0;
+    bool ok = SaveTimes(alf, newest);
+    if (ok && g_qxLastAlf != 0 && alf != g_qxLastAlf)      // for the log: when exactly does the game save?
+        Say("CounterChao: quick exit: Chao save file written (GameState=%d Level=%d)\n", (int)GameState, (int)CurrentLevel);
+    if (ok) g_qxLastAlf = alf;
+
+    if (g_qx == QX_CLOSING) {                               // a save file changed during the countdown: wait again
+        if (ok && newest != g_qxLastNewest) {
+            g_qx = QX_WAIT_SAVE;
+            g_qxLeftTick = now;
+            Say("CounterChao: quick exit: a save file was written again, waiting\n");
+        }
+        return;
+    }
+
+    if (g_qx == QX_IDLE) { if (inChao) g_qx = QX_IN_CHAO; return; }
+    if (g_qx == QX_IN_CHAO) {
+        if (inChao) return;
+        FILETIME ft;
+        GetSystemTimeAsFileTime(&ft);
+        g_qxLeftTime = FtToU64(ft);
+        g_qxLeftTick = now;
+        g_qxLastNewest = 0;
+        g_qx = QX_WAIT_SAVE;
+        Say("CounterChao: quick exit: left Chao World, checking that the game saved\n");
+        return;
+    }
+    // QX_WAIT_SAVE
+    if (inChao) { g_qx = QX_IN_CHAO; return; }              // went straight back in: start over
+    const ULONGLONG WINDOW = 30ULL * 10000000ULL;           // 30 seconds, in file-time units
+    bool savedRecently = ok && alf + WINDOW >= g_qxLeftTime;
+    const ULONGLONG QUIET = 3ULL * 10000000ULL;             // 3 seconds since the newest save file was written
+    FILETIME nowFt;
+    GetSystemTimeAsFileTime(&nowFt);
+    ULONGLONG nowTime = FtToU64(nowFt);
+    if (savedRecently && nowTime >= newest && nowTime - newest >= QUIET) {
+        g_qxLastNewest = newest;
+        g_qx = QX_CLOSING;
+        g_qxCloseTick = now + 3000;
+        Say("CounterChao: quick exit: save finished, closing the game in 3 seconds\n");
+    }
+    else if (now - g_qxLeftTick > 30000) {
+        Say("CounterChao: quick exit: no fresh Chao save found, leaving the game open\n");
+        g_qx = QX_IDLE;
+    }
+}
+
+// Called every frame from OnFrame.
+static void QuickExitFrame()
+{
+    if (g_qx != QX_CLOSING) return;
+    if ((int)CurrentLevel == 90) { g_qx = QX_IN_CHAO; return; }   // back in Chao World: cancel
+    if (g_msg.haveHelpers) {
+        float H = VerticalResolution;
+        if (!(H >= 200.0f && H <= 10000.0f)) H = 600.0f;
+        g_msgHelpers.SetDebugFontSize(MSG_BASE_SIZE * H / 600.0f);
+        g_msgHelpers.SetDebugFontColor((int)0xFF5EE6B0);
+        g_msgHelpers.DisplayDebugString(NJM_LOCATION(2, 3), "CounterChao: game saved. Closing...");
+    }
+    if (GetTickCount64() < g_qxCloseTick) return;
+    g_qx = QX_DONE;
+    HWND w = MainWindowHandle;
+    if (!w || !IsWindow(w)) { w = NULL; EnumWindows(QxFindWindow, (LPARAM)&w); }
+    Say("CounterChao: quick exit: closing the game now (window %s)\n", w ? "found" : "NOT found");
+    if (w) PostMessageA(w, WM_CLOSE, 0, 0);
+}
+
 extern "C"
 {
     __declspec(dllexport) void __cdecl Init(const char* path, const HelperFunctions& helperFunctions)
@@ -459,6 +579,7 @@ extern "C"
     __declspec(dllexport) void __cdecl OnFrame()
     {
         MsgFrame();
+        QuickExitFrame();
         static bool netReported = false;
         if (!netReported && g_netState == 2) {
             Say("CounterChao: leetify status=%lu bytes=%lu error=%lu outcome=%ld %s\n%s",
@@ -470,6 +591,7 @@ extern "C"
         static int tick = 0;
         static char last[256] = "";
         if (++tick % 30 != 0) return;
+        QuickExitTick();
 
         ChaoItem* items = (ChaoItem*)ChaoAnimalSlots;
         int freeSlots = 0;
