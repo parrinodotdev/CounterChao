@@ -1,7 +1,6 @@
 # CounterChao
 
-Kills, headshots, flashes and multi-kills become Chaos Drives and animals that appear in your garden!
-After 25 years of replaying City Escape, we're playing Counter-Strike 2 to feed the colony.
+CS2 kills, headshots, flashes, and multi-kills -> Chao Garden animals and Chaos Drives
 
 Match data provided by [Leetify](https://leetify.com). Not affiliated with SEGA, Valve, or Leetify.
 
@@ -11,7 +10,8 @@ CounterChao is a Sonic Adventure 2 mod. When you start the game it reads your la
 
 ## Status
 
-Beta. Works on my machine :) [Windows 11, SA2 Steam version]. The reward rules were prototyped in Python with unit tests, then ported into the mod. Found a bug or something confusing? Please open an issue.
+Beta, works on my machine :) \[Windows 11, Steam version of Sonic Adventure 2]
+Found a bug or something confusing? Please open an issue.
 
 ## Requirements
 
@@ -20,6 +20,8 @@ Beta. Works on my machine :) [Windows 11, SA2 Steam version]. The reward rules w
 * An internet connection when you start the game
 
 ## Setup
+
+0. Back up your saves first! Copy the `SAVEDATA` folder from `Sonic Adventure 2\resource\gd_PC\` somewhere safe. To undo anything, close the game and copy it back.
 1. Download the latest `CounterChao` zip from the [Releases page](https://github.com/parrinodotdev/CounterChao/releases).
 2. Extract it into your SA2 `mods` folder, so you end up with `mods\CounterChao\CounterChao.dll`.
 3. Open the SA Mod Manager and tick **CounterChao**.
@@ -27,9 +29,10 @@ Beta. Works on my machine :) [Windows 11, SA2 Steam version]. The reward rules w
 5. Launch the game from the Mod Manager.
 
 ## Playing
+
 1. Play some CS2. Let Leetify pick up your matches.
 2. Start SA2 and go to Stage Select -> Chao Garden, then into the Chao World lobby.
-3. A message shows up for a few seconds telling you what happened (see below).
+3. A message shows up for a few seconds telling you what happened (see Messages below).
 4. Walk into the garden. Your items are there!
 
 The mod checks Leetify once, when the game starts. If you play a match while the game is open, restart the game to pick it up.
@@ -46,44 +49,62 @@ The first time you run it, only your latest match counts, so you don't get a mou
 * **Rare animals**: a standout match can drop one
 
 A match needs at least 10 rounds to count, a match gives at most 10 items, and up to 3 new matches are rewarded each time you start the game.
+If more than 3 new matches piled up since your last launch (say, after a long break), only the 3 newest are rewarded. The older ones are skipped for good.
 
-| Message | What to do |
-| --- | --- |
-| **N items delivered** | Walk into the garden. |
-| **N items waiting** | Your garden is full. Use or feed some items, then walk back through the lobby. |
-| **No new matches** | Play a CS2 match, let Leetify pick it up, then restart the game. |
-| **Setup needed** | Open Configure in the Mod Manager and enter your SteamID64. |
-| **No matches found** | Check your SteamID64 in Configure and make sure your Leetify profile is public. |
-| **Can't reach Leetify** | Check your internet connection and restart the game. |
-| **Something went wrong** | Nothing was delivered. See `CounterChao.log` in the mod folder. |
- 
+## Messages
+
+|Message|What to do|
+|-|-|
+|**N items delivered**|Walk into the garden.|
+|**N items waiting**|Your garden is full. Use or feed some items, then walk back through the lobby.|
+|**No new matches**|Play a CS2 match, let Leetify pick it up, then restart the game.|
+|**Setup needed**|Open Configure in the Mod Manager and enter your SteamID64.|
+|**No matches found**|Check your SteamID64 in Configure and make sure your Leetify profile is public.|
+|**Can't reach Leetify**|Check your internet connection and restart the game. Items that were already waiting still get delivered.|
+|**Unexpected reply**|Leetify answered with something the mod couldn't read. Try again later.|
+|**State file problem**|`state.json` in the mod folder couldn't be read. Nothing was delivered or changed. See `CounterChao.log` in the mod folder.|
+|**Something went wrong**|The mod couldn't save its state. Nothing was delivered. See `CounterChao.log` in the mod folder.|
+
+## Troubleshooting
+
+**"An Application Control policy has blocked this file" or a "Bad Image" error (0xc0e90002) when the game starts.**
+That's Smart App Control on Windows 11 blocking the mod's DLL, because the DLL isn't code-signed. The game still runs, just without the mod, and your saves aren't touched.
+The only fix I know of is turning Smart App Control off (Windows Security -> App \& browser control -> Smart App Control settings).
+
 ## Privacy and security
+
 The mod sends your SteamID64 to Leetify's public API over HTTPS, once per game launch, and nothing else. No API key is needed. It never shows or changes any Leetify numbers; it only uses your stats to decide rewards.
 Items are written into the running game's memory, and the game saves them normally. No admin rights needed. No SEGA files are included in this project.
 In its own mod folder the mod keeps three small files: `config.ini` (your settings), `state.json` (which matches were already rewarded, and any items waiting), and `CounterChao.log` (turn it off in Configure if you like).
- 
+
 ## Current limitations :(
+
 * Windows only.
 * Items are handed to the game as soon as they appear in the garden. If the game crashes before it saves, they can be lost.
 * Tested with the SA2 Steam version and the default Chao garden. Other Chao mods haven't been tested.
 
 ## Python prototype (deprecated)
+
 <details>
 <summary>The first version was a Python script. It's kept here as a proof of concept and isn't maintained.</summary>
 It worked by writing into the running game's memory from outside. It needed Python 3 and asked you to confirm you were standing in the lobby.
- 
+
 1. Copy `config.example.json` to `config.json` and fill in your SteamID64 (keep it private; the API key is optional).
 2. Start SA2 and stand in the Chao World lobby.
 3. Run `python -m counterchao`. Add `--plan` to preview rewards without touching the game.
 4. Edit `rewards.json` to change the rates, animal pools, rare drops and caps.
+
 </details>
 
 ## Credits
+
 * Chao Island's SA2 Chao hacking guide, for the save layout
 * [SA2 Mod Loader and SA Mod Manager](https://github.com/X-Hax/sa2-mod-loader) by X-Hax, and their mod template
 * [nlohmann/json](https://github.com/nlohmann/json) for JSON parsing
 * [Leetify](https://leetify.com), for the public API. Match data provided by Leetify.
 Sonic Adventure 2 belongs to SEGA. Counter-Strike and CS2 belong to Valve.
- 
+
 ## License
+
 MIT. See LICENSE. Third-party notices for the mod template and nlohmann/json are included in the repo.
+
