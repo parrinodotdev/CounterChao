@@ -12,7 +12,7 @@
 // ---- tweakables ----
 static const bool  MSG_SHOW_GRID  = false;  // yellow coordinate grid
 static const bool  MSG_SHOW_DEBUG = false;  // prints the resolution values top-left (for testing)
-static const float MSG_BASE_SIZE  = 20.0f;  // font size at 600 px screen height
+static const float MSG_BASE_SIZE  = 16.0f;  // font size at 600 px screen height
 static const int   MSG_SECONDS    = 12;
 static const int   MSG_FPS        = 60;
 static const int   MSG_MAX_CHARS  = 40;     // never wrap wider than this

@@ -590,7 +590,7 @@ extern "C"
         while (!g_modDir.empty() && (g_modDir.back() == '\\' || g_modDir.back() == '/')) g_modDir.pop_back();
         InitializeCriticalSection(&g_logLock);
         g_logReady = true;
-        Say("CounterChao v%s ---- started ----\n", VERSION);
+        Say("CounterChao v%s (built %s %s) ---- started ----\n", VERSION, __DATE__, __TIME__);
         MsgInit(helperFunctions);
 
         std::string err;
