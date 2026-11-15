@@ -52,6 +52,11 @@ static const int ANIMAL_POOL[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
 static const int RARE_POOL[] = { 19, 18, 20, 17, 15, 16 };
 static const double RARE_AT_LEAST = 0.07;
 
+// ---- ring rules: rings for the Black Market, from the same matches that give items ----
+static const int RINGS_PER_ROUND_WON = 5;
+static const int RINGS_PER_MATCH_WIN = 50;
+static const int RINGS_CAP = 9999999;   // never push the game's ring total past this (a safe guess, not a known game limit)
+
 static uint32_t Fnv1a(const std::string& s)
 {
     uint32_t h = 2166136261u;
@@ -93,6 +98,16 @@ static std::vector<int> RewardsFor(const std::string& matchId, const json& st, i
     return out;
 }
 
+// Rings for one match. Same minimum length as items. A win is more rounds won than lost.
+static int RingsFor(const json& st)
+{
+    if ((int)Stat(st, "rounds_count") < MIN_ROUNDS) return 0;
+    int won = (int)Stat(st, "rounds_won");
+    int lost = (int)Stat(st, "rounds_lost");
+    if (won < 0) won = 0;
+    return won * RINGS_PER_ROUND_WON + (won > lost ? RINGS_PER_MATCH_WIN : 0);
+}
+
 static std::string Describe(const std::vector<int>& items)
 {
     int cnt[25] = { 0 };
@@ -112,6 +127,7 @@ static std::string g_steam;
 static int g_firstRunMatches = 1;
 static bool g_msgShown = false;      // entry message already shown this launch
 static int g_deliveredCount = 0;     // items written this launch
+static int g_deliveredRings = 0;     // rings added this launch
 // ---- log file (safe to use from any thread) and Say(): console + log in one call ----
 static CRITICAL_SECTION g_logLock;
 static bool g_logReady = false;
@@ -247,6 +263,7 @@ struct State {
     bool exists = false;
     std::vector<std::string> processed;   // newest first
     std::vector<int> pending;             // item type ids waiting for delivery
+    int pendingRings = 0;                 // rings waiting for delivery
 };
 
 static bool LoadState(State& s, std::string& err)
@@ -259,6 +276,9 @@ static bool LoadState(State& s, std::string& err)
         json j = json::parse(f);
         for (const auto& id : j.at("processed")) s.processed.push_back(id.get<std::string>());
         for (const auto& t : j.at("pending")) s.pending.push_back(t.get<int>());
+        auto pr = j.find("pending_rings");   // missing in state files from before rings existed
+        if (pr != j.end() && pr->is_number_integer()) s.pendingRings = pr->get<int>();
+        if (s.pendingRings < 0 || s.pendingRings > RINGS_CAP) s.pendingRings = 0;
         s.exists = true;
         return true;
     }
@@ -274,6 +294,7 @@ static bool SaveState(const State& s)
     j["version"] = 1;
     j["processed"] = s.processed;
     j["pending"] = s.pending;
+    j["pending_rings"] = s.pendingRings;
     std::string fin = g_modDir + "\\state.json";
     std::string tmp = fin + ".tmp";
     {
@@ -377,6 +398,7 @@ static DWORD WINAPI NetThread(LPVOID)
 
                 // 2. work out rewards, oldest match first
                 std::vector<int> pending = state.pending;
+                int pendingRings = state.pendingRings;
                 std::string report;
                 for (auto it = fresh.rbegin(); it != fresh.rend(); ++it) {
                     const json& m = **it;
@@ -389,9 +411,14 @@ static DWORD WINAPI NetThread(LPVOID)
                     int rounds = 0;
                     std::vector<int> items = RewardsFor(id, *my, rounds);
                     pending.insert(pending.end(), items.begin(), items.end());
+                    int rings = RingsFor(*my);
+                    if (pendingRings + rings <= RINGS_CAP) pendingRings += rings;
                     char line[300];
                     snprintf(line, sizeof(line), "  new %.8s rounds=%d -> %d item(s): %s\n", id.c_str(), rounds,
                         (int)items.size(), rounds < MIN_ROUNDS ? "skipped (too few rounds)" : Describe(items).c_str());
+                    report += line;
+                    snprintf(line, sizeof(line), "      rounds won=%d lost=%d -> %d ring(s)\n",
+                        (int)Stat(*my, "rounds_won"), (int)Stat(*my, "rounds_lost"), rings);
                     report += line;
                 }
 
@@ -399,6 +426,7 @@ static DWORD WINAPI NetThread(LPVOID)
                 State ns;
                 ns.exists = true;
                 ns.pending = pending;
+                ns.pendingRings = pendingRings;
                 std::set<std::string> have;
                 for (const auto& m : j) { std::string id = m.value("id", std::string()); if (have.insert(id).second) ns.processed.push_back(id); }
                 for (const auto& id : state.processed) if (have.insert(id).second) ns.processed.push_back(id);
@@ -407,9 +435,9 @@ static DWORD WINAPI NetThread(LPVOID)
                 if (saved) { g_state = ns; InterlockedExchange(&g_stateReady, 1); }
                 outcome = saved ? OUT_OK : OUT_SAVE_FAIL;
 
-                report += "  waiting for delivery: " + Describe(pending) + "\n";
-                snprintf(g_summary, sizeof(g_summary), "matches=%d first_run=%d new_matches=%d pending=%d state_saved=%d",
-                    total, state.exists ? 0 : 1, (int)fresh.size(), (int)pending.size(), saved ? 1 : 0);
+                report += "  waiting for delivery: " + Describe(pending) + ", rings x" + std::to_string(pendingRings) + "\n";
+                snprintf(g_summary, sizeof(g_summary), "matches=%d first_run=%d new_matches=%d pending=%d pending_rings=%d state_saved=%d",
+                    total, state.exists ? 0 : 1, (int)fresh.size(), (int)pending.size(), pendingRings, saved ? 1 : 0);
                 g_report = report;
             }
             else {
@@ -604,8 +632,22 @@ extern "C"
         }
         bool inLobby = (int)CurrentLevel == 90 && (int)CurrentChaoArea == 7
             && (int)GameState == 16 && ok == 1;
+        // Rings: add what's waiting to the game's ring total. The game writes it to the save at the exit teleporter.
+        int ringsNow = 0;
+        if (inLobby && g_netState == 2 && g_stateReady && g_state.pendingRings > 0) {
+            int have = (int)TotalRings;
+            int add = g_state.pendingRings;
+            if (have < 0 || have >= RINGS_CAP) add = 0;
+            else if (add > RINGS_CAP - have) add = RINGS_CAP - have;
+            if (add > 0) TotalRings = have + add;
+            g_state.pendingRings = 0;
+            bool saved = SaveState(g_state);
+            ringsNow = add;
+            g_deliveredRings += add;
+            Say("CounterChao: added %d ring(s), total %d -> %d, state_saved=%d\n", add, have, (int)TotalRings, saved ? 1 : 0);
+        }
+        int written = 0;
         if (inLobby && g_netState == 2 && g_stateReady && !g_state.pending.empty() && freeSlots > 0) {
-            int written = 0;
             for (int i = 0; i < CHAO_SLOTS && !g_state.pending.empty(); i++) {
                 if (!(items[i].type == 0xFFFF && items[i].garden == 0xFFFF)) continue;
                 int type = g_state.pending.front();
@@ -629,7 +671,10 @@ extern "C"
                 {
                     char head[96];
                     int left = (int)g_state.pending.size();
-                    snprintf(head, sizeof(head), "%d item%s delivered.", written, written == 1 ? "" : "s");
+                    if (ringsNow > 0)
+                        snprintf(head, sizeof(head), "%d item%s and %d rings delivered.", written, written == 1 ? "" : "s", ringsNow);
+                    else
+                        snprintf(head, sizeof(head), "%d item%s delivered.", written, written == 1 ? "" : "s");
                     if (left > 0) {
                         char more[96];
                         snprintf(more, sizeof(more), "%d more waiting. Free some space and come back to the lobby.", left);
@@ -639,6 +684,21 @@ extern "C"
                         MsgShow(0xFF5EE6B0, "CounterChao", head, "Walk into the garden to find them.");
                     }
                 }
+            }
+        }
+        if (ringsNow > 0 && written == 0) {   // rings arrived without items: say so
+            g_msgShown = true;
+            char head[96];
+            int left = (int)g_state.pending.size();
+            snprintf(head, sizeof(head), "%d rings delivered.", ringsNow);
+            if (left > 0) {
+                char more[128];
+                snprintf(more, sizeof(more), "%d item%s waiting. Your garden is full. Use or feed some items, then come back to the lobby.",
+                    left, left == 1 ? "" : "s");
+                MsgShow(0xFF5EE6B0, "CounterChao", head, more);
+            }
+            else {
+                MsgShow(0xFF5EE6B0, "CounterChao", head, "Spend them at the Black Market.");
             }
         }
         if (inLobby && !g_msgShown && g_netState == 2) {
