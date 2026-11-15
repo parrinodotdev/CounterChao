@@ -1,4 +1,4 @@
-// CounterChao_msg.h - Tier 1 on-screen message (debug-text based), v2.
+// CounterChao_msg.h - Tier 1 on-screen message (debug-text based), v3: adds a backing box.
 // Include AFTER pch.h / SA2ModLoader.h in main.cpp.
 // Same API as v1: MsgInit(helpers), MsgShow(argb,title,line1,line2), MsgFrame().
 #pragma once
@@ -17,6 +17,11 @@ static const int   MSG_SECONDS    = 12;
 static const int   MSG_FPS        = 60;
 static const int   MSG_MAX_CHARS  = 40;     // never wrap wider than this
 static const int   MSG_MAX_LINES  = 8;
+static const bool     MSG_BOX       = true;        // dark box behind the text
+static const unsigned MSG_BOX_COLOR = 0xC0000000;  // ARGB: black at 75% opacity
+static const int      MSG_BOX_PAD   = 1;           // empty cells between box edge and text
+static const int      MSG_BOX_MAX_COLS  = 60;
+static const int      MSG_BOX_MAX_CELLS = 1200;    // the loader holds about 2000 characters per frame
 
 struct MsgState {
     char title[64];
@@ -66,6 +71,23 @@ static int MsgWrap(const char* src, int maxChars, char lines[][64], int start) {
     return n;
 }
 
+// Fill a rectangle of character cells. Glyph 8 of the mod loader's debug font is a solid
+// square, and strings are drawn in the order they are queued, so text queued after this
+// lands on top. Set the font size before calling.
+static void MsgBox(HelperFunctions& h, int col, int row, int cols, int rows, unsigned argb) {
+    if (!MSG_BOX) return;
+    if (col < 0) col = 0;
+    if (row < 0) row = 0;
+    if (cols > MSG_BOX_MAX_COLS) cols = MSG_BOX_MAX_COLS;
+    if (cols < 1 || rows < 1 || cols * rows > MSG_BOX_MAX_CELLS) return;
+    char fill[MSG_BOX_MAX_COLS + 1];
+    memset(fill, 8, cols);
+    fill[cols] = 0;
+    h.SetDebugFontColor((int)argb);
+    for (int r = 0; r < rows; r++)
+        h.DisplayDebugString(NJM_LOCATION(col, row + r), fill);
+}
+
 // Call EVERY frame from OnFrame. Only draws inside Chao World.
 static void MsgFrame() {
     if (!g_msg.haveHelpers) return;
@@ -75,7 +97,7 @@ static void MsgFrame() {
     float W = HorizontalResolution, H = VerticalResolution;
     if (!(W >= 200.0f && W <= 10000.0f && H >= 200.0f && H <= 10000.0f)) { W = 800.0f; H = 600.0f; }
     float scale = H / 600.0f;
-    float size = MSG_BASE_SIZE * scale;
+    float size = (float)(int)(MSG_BASE_SIZE * scale);   // whole pixels, so box cells meet with no gaps
 
     if (MSG_SHOW_DEBUG) {
         char b[96];
@@ -111,6 +133,16 @@ static void MsgFrame() {
     int total = MsgWrap(g_msg.text2, maxChars, lines, head);
 
     h.SetDebugFontSize(size);
+
+    int widest = (int)strlen(g_msg.title);
+    for (int i = 0; i < total; i++) {
+        int n = (int)strlen(lines[i]);
+        if (n > widest) widest = n;
+    }
+    int lastRow = total > 0 ? row + step + 1 + (total - 1) * step : row;
+    MsgBox(h, col - MSG_BOX_PAD, row - MSG_BOX_PAD, widest + 2 * MSG_BOX_PAD,
+           lastRow - row + 1 + 2 * MSG_BOX_PAD, MSG_BOX_COLOR);
+
     h.SetDebugFontColor(0xFFFFFFFF);
     h.DisplayDebugString(NJM_LOCATION(col, row), g_msg.title);
     int r = row + step + 1;
