@@ -695,9 +695,10 @@ extern "C"
         }
 
         char line[256];
-        sprintf_s(line, "slots_ok=%d free=%d GameState=%d Level=%d Area(cur/last/next)=%d/%d/%d types=%s",
+        sprintf_s(line, "slots_ok=%d free=%d GameState=%d Level=%d Area(cur/last/next)=%d/%d/%d rings=%d rings_save=%d types=%s",
             ok, freeSlots, (int)GameState, (int)CurrentLevel,
-            (int)CurrentChaoArea, (int)LastChaoArea, (int)NextChaoArea, types);
+            (int)CurrentChaoArea, (int)LastChaoArea, (int)NextChaoArea,
+            (int)TotalRings, (int)TotalRings_Save, types);
         if (strcmp(line, last) != 0) {
             Say("CounterChao: %s\n", line);
             strcpy_s(last, line);
