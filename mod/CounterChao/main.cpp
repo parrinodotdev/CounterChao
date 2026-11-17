@@ -74,19 +74,30 @@ static double Stat(const json& st, const char* name)
     return (it != st.end() && it->is_number()) ? it->get<double>() : 0.0;
 }
 
+// A whole-number stat, kept inside a sane range so a nonsense value from Leetify can't cause trouble.
+static int StatInt(const json& st, const char* name)
+{
+    double v = Stat(st, name);
+    if (!(v > 0.0)) return 0;
+    if (v > 100000.0) return 100000;
+    return (int)v;
+}
+
 static std::vector<int> RewardsFor(const std::string& matchId, const json& st, int& rounds)
 {
-    rounds = (int)Stat(st, "rounds_count");
+    rounds = StatInt(st, "rounds_count");
     std::vector<int> out;
     if (rounds < MIN_ROUNDS) return out;
 
     std::vector<int> drives, animals, rare;
     for (const auto& d : DRIVES) {
-        int n = (int)(Stat(st, d.stat) / d.per);
+        int n = StatInt(st, d.stat) / d.per;
+        if (n > (int)MAX_ITEMS) n = (int)MAX_ITEMS;   // a match never gives more than MAX_ITEMS anyway
         for (int i = 0; i < n; i++) drives.push_back(d.type);
     }
     int k = 0;
-    for (const auto& a : ANIMAL_STATS) k += (int)(Stat(st, a.stat) / a.per);
+    for (const auto& a : ANIMAL_STATS) k += StatInt(st, a.stat) / a.per;
+    if (k > (int)MAX_ITEMS) k = (int)MAX_ITEMS;
     if (k > 0) {
         std::mt19937 rng(Fnv1a(matchId));
         for (int i = 0; i < k; i++) animals.push_back(ANIMAL_POOL[rng() % (sizeof(ANIMAL_POOL) / sizeof(int))]);
@@ -105,10 +116,9 @@ static std::vector<int> RewardsFor(const std::string& matchId, const json& st, i
 // Rings for one match. Same minimum length as items. A win is more rounds won than lost.
 static int RingsFor(const json& st)
 {
-    if ((int)Stat(st, "rounds_count") < MIN_ROUNDS) return 0;
-    int won = (int)Stat(st, "rounds_won");
-    int lost = (int)Stat(st, "rounds_lost");
-    if (won < 0) won = 0;
+    if (StatInt(st, "rounds_count") < MIN_ROUNDS) return 0;
+    int won = StatInt(st, "rounds_won");
+    int lost = StatInt(st, "rounds_lost");
     return won * RINGS_PER_ROUND_WON + (won > lost ? RINGS_PER_MATCH_WIN : 0);
 }
 
@@ -253,6 +263,9 @@ static bool LoadSettings(std::string& err)
         }
     }
 
+    if (g_firstRunMatches < 1) g_firstRunMatches = 1;   // same limits as the Configure window
+    if (g_firstRunMatches > 5) g_firstRunMatches = 5;
+
     Log("settings loaded from %s", ValidSteam(g_steam) ? source : "nowhere (no valid SteamID64 found)");
     Log("quick exit (close the game after saving): %s", g_closeAfterSave ? "on" : "off");
     g_logReady = g_keepLog;                             // KeepLog switched off: no more log lines from here on
@@ -372,10 +385,12 @@ static DWORD WINAPI NetThread(LPVOID)
 
     HINTERNET s = WinHttpOpen(L"CounterChao/0.1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    // Time limits have to be set before the request is created: a request copies them from the session at that moment.
+    // Resolve, connect, send: 10 s each. Receive: 60 s, because Leetify has taken over 30 s to answer.
+    if (s) WinHttpSetTimeouts(s, 10000, 10000, 10000, 60000);
     HINTERNET c = s ? WinHttpConnect(s, L"api-public.cs-prod.leetify.com", INTERNET_DEFAULT_HTTPS_PORT, 0) : NULL;
     HINTERNET r = c ? WinHttpOpenRequest(c, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER,
         WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : NULL;
-    if (s) WinHttpSetTimeouts(s, 10000, 10000, 10000, 20000);
 
     bool ok = r != NULL
         && WinHttpSendRequest(r, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)
@@ -436,14 +451,16 @@ static DWORD WINAPI NetThread(LPVOID)
                     std::vector<int> items = RewardsFor(id, *my, rounds);
                     pending.insert(pending.end(), items.begin(), items.end());
                     int rings = RingsFor(*my);
-                    if (pendingRings + rings <= RINGS_CAP) pendingRings += rings;
+                    bool ringsFit = pendingRings + rings <= RINGS_CAP;
+                    if (ringsFit) pendingRings += rings;
                     char line[300];
                     snprintf(line, sizeof(line), "  new %.8s rounds=%d -> %d item(s): %s\n", id.c_str(), rounds,
                         (int)items.size(), rounds < MIN_ROUNDS ? "skipped (too few rounds)" : Describe(items).c_str());
                     report += line;
                     snprintf(line, sizeof(line), "      rounds won=%d lost=%d -> %d ring(s)\n",
-                        (int)Stat(*my, "rounds_won"), (int)Stat(*my, "rounds_lost"), rings);
+                        StatInt(*my, "rounds_won"), StatInt(*my, "rounds_lost"), rings);
                     report += line;
+                    if (!ringsFit) report += "      waiting rings are at the limit, these were not added\n";
                 }
 
                 // 3. everything fetched is now handled; remember it, then save
@@ -492,6 +509,8 @@ static DWORD WINAPI NetThread(LPVOID)
 
 // ---- quick exit: once the Chao World exit teleporter has saved, close the game. Off unless ticked in Configure. ----
 // It never closes the game unless it has seen a fresh Chao save file on disk, and no save file has been written for 3 seconds.
+// It only closes the game at stage select (Level 0, GameState 0). After a Chao Key visit the game goes on to the
+// next story stage instead; then quick exit stands down.
 enum { QX_IDLE, QX_IN_CHAO, QX_WAIT_SAVE, QX_CLOSING, QX_DONE };
 static int g_qx = QX_IDLE;
 static ULONGLONG g_qxLeftTick = 0, g_qxCloseTick = 0;   // GetTickCount64 values
@@ -538,7 +557,8 @@ static BOOL CALLBACK QxFindWindow(HWND w, LPARAM out)
 static void QuickExitTick()
 {
     if (!g_closeAfterSave || g_qx == QX_DONE) return;
-    bool inChao = (int)CurrentLevel == 90;
+    int level = (int)CurrentLevel, gs = (int)GameState;
+    bool inChao = level == 90;
     ULONGLONG now = GetTickCount64();
     ULONGLONG alf = 0, newest = 0;
     bool ok = SaveTimes(alf, newest);
@@ -555,7 +575,8 @@ static void QuickExitTick()
         return;
     }
 
-    if (g_qx == QX_IDLE) { if (inChao) g_qx = QX_IN_CHAO; return; }
+    // GameState 16 = actually playing. Story mode also passes through Level 90 between stages without entering Chao World.
+    if (g_qx == QX_IDLE) { if (inChao && gs == 16) g_qx = QX_IN_CHAO; return; }
     if (g_qx == QX_IN_CHAO) {
         if (inChao) return;
         FILETIME ft;
@@ -569,13 +590,18 @@ static void QuickExitTick()
     }
     // QX_WAIT_SAVE
     if (inChao) { g_qx = QX_IN_CHAO; return; }              // went straight back in: start over
+    if (level != 0) {                                       // the game went on to a stage: not ours to close
+        Say("CounterChao: quick exit: the game went on to a stage (Level=%d), leaving the game open\n", level);
+        g_qx = QX_IDLE;
+        return;
+    }
     const ULONGLONG WINDOW = 30ULL * 10000000ULL;           // 30 seconds, in file-time units
     bool savedRecently = ok && alf + WINDOW >= g_qxLeftTime;
     const ULONGLONG QUIET = 3ULL * 10000000ULL;             // 3 seconds since the newest save file was written
     FILETIME nowFt;
     GetSystemTimeAsFileTime(&nowFt);
     ULONGLONG nowTime = FtToU64(nowFt);
-    if (savedRecently && nowTime >= newest && nowTime - newest >= QUIET) {
+    if (gs == 0 && savedRecently && nowTime >= newest && nowTime - newest >= QUIET) {
         g_qxLastNewest = newest;
         g_qx = QX_CLOSING;
         g_qxCloseTick = now + 3000;
@@ -592,6 +618,12 @@ static void QuickExitFrame()
 {
     if (g_qx != QX_CLOSING) return;
     if ((int)CurrentLevel == 90) { g_qx = QX_IN_CHAO; return; }   // back in Chao World: cancel
+    if ((int)CurrentLevel != 0 || (int)GameState != 0) {          // no longer at stage select: cancel
+        Say("CounterChao: quick exit: the game moved on (GameState=%d Level=%d), leaving the game open\n",
+            (int)GameState, (int)CurrentLevel);
+        g_qx = QX_IDLE;
+        return;
+    }
     if (g_msg.haveHelpers) {
         float H = VerticalResolution;
         if (!(H >= 200.0f && H <= 10000.0f)) H = 600.0f;
@@ -642,21 +674,21 @@ extern "C"
         }
 
         static int tick = 0;
-        static char last[256] = "";
+        static char last[512] = "";
         if (++tick % 30 != 0) return;
         QuickExitTick();
 
         ChaoItem* items = (ChaoItem*)ChaoAnimalSlots;
         int freeSlots = 0;
         int ok = 1;
-        char types[CHAO_SLOTS * 5 + 1] = "";
+        char slots[CHAO_SLOTS * 10 + 1] = "";   // "type/garden" for each slot
         for (int i = 0; i < CHAO_SLOTS; i++) {
-            sprintf_s(types + i * 5, 6, "%04X ", items[i].type);
+            sprintf_s(slots + i * 10, 11, "%04X/%04X ", items[i].type, items[i].garden);
             if (items[i].type == 0xFFFF && items[i].garden == 0xFFFF) { freeSlots++; continue; }
             if (items[i].type > 24 || items[i].garden < 1 || items[i].garden > 3) ok = 0;
         }
-        bool inLobby = (int)CurrentLevel == 90 && (int)CurrentChaoArea == 7
-            && (int)GameState == 16 && ok == 1;
+        bool lobbyArea = (int)CurrentLevel == 90 && (int)CurrentChaoArea == 7 && (int)GameState == 16;
+        bool inLobby = lobbyArea && ok == 1;   // delivery needs every slot to look familiar
         // Rings: add what's waiting to the game's ring total. The game writes it to the save at the exit teleporter.
         int ringsNow = 0;
         if (inLobby && g_netState == 2 && g_stateReady && g_state.pendingRings > 0) {
@@ -664,6 +696,8 @@ extern "C"
             int add = g_state.pendingRings;
             if (have < 0 || have >= RINGS_CAP) add = 0;
             else if (add > RINGS_CAP - have) add = RINGS_CAP - have;
+            if (add < g_state.pendingRings)
+                Say("CounterChao: %d ring(s) not added, the ring total is at its limit (%d)\n", g_state.pendingRings - add, RINGS_CAP);
             if (add > 0) TotalRings = have + add;
             g_state.pendingRings = 0;
             bool saved = SaveState(g_state);
@@ -672,11 +706,18 @@ extern "C"
             Say("CounterChao: added %d ring(s), total %d -> %d, state_saved=%d\n", add, have, (int)TotalRings, saved ? 1 : 0);
         }
         int written = 0;
+        bool dropped = false;
         if (inLobby && g_netState == 2 && g_stateReady && !g_state.pending.empty() && freeSlots > 0) {
             for (int i = 0; i < CHAO_SLOTS && !g_state.pending.empty(); i++) {
                 if (!(items[i].type == 0xFFFF && items[i].garden == 0xFFFF)) continue;
                 int type = g_state.pending.front();
-                if (type < 0 || type > 24) { g_state.pending.erase(g_state.pending.begin()); i--; continue; }
+                if (type < 0 || type > 24) {
+                    Say("CounterChao: dropped a waiting item with unknown type %d\n", type);
+                    g_state.pending.erase(g_state.pending.begin());
+                    dropped = true;
+                    i--;
+                    continue;
+                }
                 items[i].type = (uint16_t)type;
                 items[i].garden = 1;
                 items[i].unknown = 0;
@@ -687,6 +728,7 @@ extern "C"
                 written++;
                 Say("CounterChao: delivered %s into slot %d\n", NAMES[type], i);
             }
+            if (dropped && !written) SaveState(g_state);
             if (written) {
                 g_deliveredCount += written;
                 bool saved = SaveState(g_state);
@@ -726,7 +768,19 @@ extern "C"
                 MsgShow(0xFF5EE6B0, "CounterChao", head, "Spend them at the Black Market.");
             }
         }
-        if (inLobby && !g_msgShown && g_netState == 2) {
+        // The slots hold something the mod doesn't recognise. If rewards are waiting, say so instead of staying silent.
+        static int badTicks = 0;          // half-seconds in the lobby with slots_ok=0
+        static bool holdShown = false;    // once per launch
+        if (lobbyArea && ok == 0) badTicks++; else badTicks = 0;
+        bool waitingAny = g_netState == 2 && g_stateReady && (!g_state.pending.empty() || g_state.pendingRings > 0);
+        if (badTicks >= 4 && waitingAny && !holdShown) {
+            holdShown = true;
+            Say("CounterChao: delivery on hold: a slot holds something unrecognised (see slots= in the status line)\n");
+            MsgShow(0xFFFFC857, "CounterChao: delivery on hold", "Some items in your gardens aren't recognised.",
+                "Nothing was changed. Pick them up or give them to a Chao, then come back to the lobby.");
+        }
+        // The once-per-launch message. With nothing waiting it doesn't depend on the slots.
+        if (lobbyArea && (ok == 1 || (!waitingAny && badTicks >= 4)) && !g_msgShown && g_netState == 2) {
             g_msgShown = true;
             int waiting = (int)g_state.pending.size();
             char head[96];
@@ -793,11 +847,11 @@ extern "C"
             }
         }
 
-        char line[256];
-        sprintf_s(line, "slots_ok=%d free=%d GameState=%d Level=%d Area(cur/last/next)=%d/%d/%d rings=%d rings_save=%d types=%s",
+        char line[512];
+        snprintf(line, sizeof(line), "slots_ok=%d free=%d GameState=%d Level=%d Area(cur/last/next)=%d/%d/%d rings=%d rings_save=%d slots=%s",
             ok, freeSlots, (int)GameState, (int)CurrentLevel,
             (int)CurrentChaoArea, (int)LastChaoArea, (int)NextChaoArea,
-            (int)TotalRings, (int)TotalRings_Save, types);
+            (int)TotalRings, (int)TotalRings_Save, slots);
         if (strcmp(line, last) != 0) {
             Say("CounterChao: %s\n", line);
             strcpy_s(last, line);
