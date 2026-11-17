@@ -383,7 +383,9 @@ static DWORD WINAPI NetThread(LPVOID)
     std::wstring path = L"/v3/profile/matches?steam64_id=";
     path += std::wstring(g_steam.begin(), g_steam.end());
 
-    HINTERNET s = WinHttpOpen(L"CounterChao/0.1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    std::string uaNarrow = std::string("CounterChao/") + VERSION;   // R12: follows VERSION, e.g. CounterChao/0.4.0-dev
+    std::wstring ua(uaNarrow.begin(), uaNarrow.end());
+    HINTERNET s = WinHttpOpen(ua.c_str(), WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     // Time limits have to be set before the request is created: a request copies them from the session at that moment.
     // Resolve, connect, send: 10 s each. Receive: 60 s, because Leetify has taken over 30 s to answer.
@@ -511,8 +513,13 @@ static DWORD WINAPI NetThread(LPVOID)
 // It never closes the game unless it has seen a fresh Chao save file on disk, and no save file has been written for 3 seconds.
 // It only closes the game at stage select (Level 0, GameState 0). After a Chao Key visit the game goes on to the
 // next story stage instead; then quick exit stands down.
-enum { QX_IDLE, QX_IN_CHAO, QX_WAIT_SAVE, QX_CLOSING, QX_DONE };
+// Exit game in the garden pause menu (R15) saves with GameState 29 and goes to the title screen or stage select, but
+// CurrentLevel stays 90 until a stage loads. So that path is followed separately: QX_EXIT_GAME waits for the save
+// to finish and closes with a short message instead of the 3-second countdown.
+enum { QX_IDLE, QX_IN_CHAO, QX_WAIT_SAVE, QX_EXIT_GAME, QX_CLOSING, QX_DONE };
 static int g_qx = QX_IDLE;
+static bool g_qxFromExitGame = false;      // the current close was started by Exit game
+static volatile bool g_exitGameSeen = false;   // set by OnFrame (every frame) when GameState 29 shows in Chao World
 static ULONGLONG g_qxLeftTick = 0, g_qxCloseTick = 0;   // GetTickCount64 values
 static ULONGLONG g_qxLeftTime = 0, g_qxLastNewest = 0, g_qxLastAlf = 0;    // file times
 
@@ -566,18 +573,35 @@ static void QuickExitTick()
         Say("CounterChao: quick exit: Chao save file written (GameState=%d Level=%d)\n", (int)GameState, (int)CurrentLevel);
     if (ok) g_qxLastAlf = alf;
 
+    bool exitGame = g_exitGameSeen;
+    g_exitGameSeen = false;
+
     if (g_qx == QX_CLOSING) {                               // a save file changed during the countdown: wait again
         if (ok && newest != g_qxLastNewest) {
-            g_qx = QX_WAIT_SAVE;
+            g_qx = g_qxFromExitGame ? QX_EXIT_GAME : QX_WAIT_SAVE;
             g_qxLeftTick = now;
             Say("CounterChao: quick exit: a save file was written again, waiting\n");
         }
         return;
     }
 
+    FILETIME nowFt;
+    GetSystemTimeAsFileTime(&nowFt);
+    ULONGLONG nowTime = FtToU64(nowFt);
+    const ULONGLONG WINDOW = 30ULL * 10000000ULL;           // 30 seconds, in file-time units
+    const ULONGLONG QUIET = 3ULL * 10000000ULL;             // 3 seconds since the newest save file was written
+
     // GameState 16 = actually playing. Story mode also passes through Level 90 between stages without entering Chao World.
     if (g_qx == QX_IDLE) { if (inChao && gs == 16) g_qx = QX_IN_CHAO; return; }
     if (g_qx == QX_IN_CHAO) {
+        if (exitGame) {                                     // Exit game from the garden pause menu
+            g_qxLeftTime = nowTime;
+            g_qxLeftTick = now;
+            g_qxLastNewest = 0;
+            g_qx = QX_EXIT_GAME;
+            Say("CounterChao: quick exit: Exit game chosen, waiting for the save to finish\n");
+            return;
+        }
         if (inChao) return;
         FILETIME ft;
         GetSystemTimeAsFileTime(&ft);
@@ -588,6 +612,31 @@ static void QuickExitTick()
         Say("CounterChao: quick exit: left Chao World, checking that the game saved\n");
         return;
     }
+    bool savedRecently = ok && alf + WINDOW >= g_qxLeftTime;
+    bool quiet = nowTime >= newest && nowTime - newest >= QUIET;
+
+    if (g_qx == QX_EXIT_GAME) {
+        // After Exit game the game sits at the title screen or stage select with GameState 0 (Level still reads 90).
+        // Anything else means the player moved on: leave the game open.
+        if (gs != 0 && gs != 29) {
+            Say("CounterChao: quick exit: the game moved on after Exit game (GameState=%d Level=%d), leaving the game open\n", gs, level);
+            g_qx = QX_IDLE;
+            return;
+        }
+        if (gs == 0 && savedRecently && quiet) {
+            g_qxLastNewest = newest;
+            g_qxFromExitGame = true;
+            g_qx = QX_CLOSING;
+            g_qxCloseTick = now + 1000;                     // a short look at the message, no countdown
+            Say("CounterChao: quick exit: Exit game saved, closing the game\n");
+        }
+        else if (now - g_qxLeftTick > 30000) {
+            Say("CounterChao: quick exit: no fresh Chao save found after Exit game, leaving the game open\n");
+            g_qx = QX_IDLE;
+        }
+        return;
+    }
+
     // QX_WAIT_SAVE
     if (inChao) { g_qx = QX_IN_CHAO; return; }              // went straight back in: start over
     if (level != 0) {                                       // the game went on to a stage: not ours to close
@@ -595,14 +644,9 @@ static void QuickExitTick()
         g_qx = QX_IDLE;
         return;
     }
-    const ULONGLONG WINDOW = 30ULL * 10000000ULL;           // 30 seconds, in file-time units
-    bool savedRecently = ok && alf + WINDOW >= g_qxLeftTime;
-    const ULONGLONG QUIET = 3ULL * 10000000ULL;             // 3 seconds since the newest save file was written
-    FILETIME nowFt;
-    GetSystemTimeAsFileTime(&nowFt);
-    ULONGLONG nowTime = FtToU64(nowFt);
-    if (gs == 0 && savedRecently && nowTime >= newest && nowTime - newest >= QUIET) {
+    if (gs == 0 && savedRecently && quiet) {
         g_qxLastNewest = newest;
+        g_qxFromExitGame = false;
         g_qx = QX_CLOSING;
         g_qxCloseTick = now + 3000;
         Say("CounterChao: quick exit: save finished, closing the game in 3 seconds\n");
@@ -617,8 +661,17 @@ static void QuickExitTick()
 static void QuickExitFrame()
 {
     if (g_qx != QX_CLOSING) return;
-    if ((int)CurrentLevel == 90) { g_qx = QX_IN_CHAO; return; }   // back in Chao World: cancel
-    if ((int)CurrentLevel != 0 || (int)GameState != 0) {          // no longer at stage select: cancel
+    if (g_qxFromExitGame) {
+        // Level still reads 90 after Exit game, so only GameState tells us the player is still on a menu.
+        if ((int)GameState != 0) {
+            Say("CounterChao: quick exit: the game moved on (GameState=%d Level=%d), leaving the game open\n",
+                (int)GameState, (int)CurrentLevel);
+            g_qx = QX_IDLE;
+            return;
+        }
+    }
+    else if ((int)CurrentLevel == 90) { g_qx = QX_IN_CHAO; return; }   // back in Chao World: cancel
+    else if ((int)CurrentLevel != 0 || (int)GameState != 0) {          // no longer at stage select: cancel
         Say("CounterChao: quick exit: the game moved on (GameState=%d Level=%d), leaving the game open\n",
             (int)GameState, (int)CurrentLevel);
         g_qx = QX_IDLE;
@@ -676,9 +729,29 @@ extern "C"
         // Where did this Chao World visit start? 0 = stage select. Anything else = a stage, which means a Chao Key visit.
         // On a Chao Key visit the game empties the item slots when the garden loads and refills them with the stage's
         // animals, so items placed in the lobby would be lost. Items wait for a visit from stage select. Rings are not affected.
+        // Exit game in the garden pause menu (R15) saves with GameState 29, then goes to the title screen or stage select.
+        // CurrentLevel stays 90 until a stage loads, so without this the next visit would still count as a Chao Key visit.
         static int levelBeforeChao = 0;
-        if ((int)CurrentLevel != 90) levelBeforeChao = (int)CurrentLevel;
+        static bool inExitGameSave = false;
+        int lvlNow = (int)CurrentLevel, gsNow = (int)GameState;
+        if (lvlNow != 90) levelBeforeChao = lvlNow;
+        if (lvlNow == 90 && gsNow == 29) {
+            if (!inExitGameSave) {
+                inExitGameSave = true;
+                g_exitGameSeen = true;
+                Say("CounterChao: Exit game save seen (was Level=%d). The next Chao World visit counts as coming from stage select\n",
+                    levelBeforeChao);
+            }
+            levelBeforeChao = 0;
+        }
+        else inExitGameSave = false;
         bool fromStage = levelBeforeChao != 0;
+
+        // A Chao World visit ends when the game leaves play (GameState 0) or loads a level that isn't Chao World.
+        // The per-visit flags reset here, every frame, so a short GameState 0 isn't missed.
+        static bool heldLogged = false;      // one "held" log line per visit
+        static bool visitMsgShown = false;   // one lobby message per visit
+        if (lvlNow != 90 || gsNow == 0) { heldLogged = false; visitMsgShown = false; }
 
         static int tick = 0;
         static char last[512] = "";
@@ -716,8 +789,6 @@ extern "C"
             g_deliveredRings += add;
             Say("CounterChao: added %d ring(s), total %d -> %d, state_saved=%d\n", add, have, (int)TotalRings, saved ? 1 : 0);
         }
-        static bool heldLogged = false;   // one log line per visit
-        if ((int)CurrentLevel != 90) heldLogged = false;
         if (inLobby && fromStage && g_netState == 2 && g_stateReady && !g_state.pending.empty() && !heldLogged) {
             heldLogged = true;
             Say("CounterChao: %d item(s) held: this visit came from a stage (Level=%d). They are delivered on a visit from stage select\n",
@@ -753,6 +824,7 @@ extern "C"
                 Say("CounterChao: delivered %d item(s), %d still waiting, state_saved=%d\n",
                     written, (int)g_state.pending.size(), saved ? 1 : 0);
                 g_msgShown = true;   // this delivery message replaces the entry message
+                visitMsgShown = true;
                 {
                     char head[96];
                     int left = (int)g_state.pending.size();
@@ -773,6 +845,7 @@ extern "C"
         }
         if (ringsNow > 0 && written == 0) {   // rings arrived without items: say so
             g_msgShown = true;
+            visitMsgShown = true;
             char head[96];
             int left = (int)g_state.pending.size();
             snprintf(head, sizeof(head), "%d rings delivered.", ringsNow);
@@ -802,6 +875,7 @@ extern "C"
         // The once-per-launch message. With nothing waiting it doesn't depend on the slots.
         if (lobbyArea && (ok == 1 || (!waitingAny && badTicks >= 4)) && !g_msgShown && g_netState == 2) {
             g_msgShown = true;
+            visitMsgShown = true;
             int waiting = (int)g_state.pending.size();
             char head[96];
             LONG outcome = g_outcome;
@@ -867,6 +941,16 @@ extern "C"
             else {
                 MsgShow(0xFF6CB6FF, "CounterChao", "No new matches.", "Play a CS2 match, let Leetify pick it up, then restart the game.");
             }
+        }
+        // Later visits in the same launch: if items are still waiting and none could be placed, say why. Once per visit.
+        else if (inLobby && !visitMsgShown && written == 0 && g_netState == 2 && g_stateReady && !g_state.pending.empty()) {
+            visitMsgShown = true;
+            int waiting = (int)g_state.pending.size();
+            char head[96];
+            snprintf(head, sizeof(head), "%d item%s waiting.", waiting, waiting == 1 ? "" : "s");
+            MsgShow(0xFFFFC857, "CounterChao", head, fromStage
+                ? "They arrive when you come in from stage select."
+                : "Your garden is full. Use or feed some items, then come back to the lobby.");
         }
 
         char line[512];
