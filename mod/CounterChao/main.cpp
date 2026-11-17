@@ -673,6 +673,13 @@ extern "C"
             netReported = true;
         }
 
+        // Where did this Chao World visit start? 0 = stage select. Anything else = a stage, which means a Chao Key visit.
+        // On a Chao Key visit the game empties the item slots when the garden loads and refills them with the stage's
+        // animals, so items placed in the lobby would be lost. Items wait for a visit from stage select. Rings are not affected.
+        static int levelBeforeChao = 0;
+        if ((int)CurrentLevel != 90) levelBeforeChao = (int)CurrentLevel;
+        bool fromStage = levelBeforeChao != 0;
+
         static int tick = 0;
         static char last[512] = "";
         if (++tick % 30 != 0) return;
@@ -685,7 +692,11 @@ extern "C"
         for (int i = 0; i < CHAO_SLOTS; i++) {
             sprintf_s(slots + i * 10, 11, "%04X/%04X ", items[i].type, items[i].garden);
             if (items[i].type == 0xFFFF && items[i].garden == 0xFFFF) { freeSlots++; continue; }
-            if (items[i].type > 24 || items[i].garden < 1 || items[i].garden > 3) ok = 0;
+            // An occupied slot is a known type lying in garden 1 to 3, or with garden FFFF:
+            // that is how the game holds animals and drives just brought in from a stage.
+            uint16_t g = items[i].garden;
+            bool gardenOk = (g >= 1 && g <= 3) || g == 0xFFFF;
+            if (items[i].type > 24 || !gardenOk) ok = 0;
         }
         bool lobbyArea = (int)CurrentLevel == 90 && (int)CurrentChaoArea == 7 && (int)GameState == 16;
         bool inLobby = lobbyArea && ok == 1;   // delivery needs every slot to look familiar
@@ -705,9 +716,16 @@ extern "C"
             g_deliveredRings += add;
             Say("CounterChao: added %d ring(s), total %d -> %d, state_saved=%d\n", add, have, (int)TotalRings, saved ? 1 : 0);
         }
+        static bool heldLogged = false;   // one log line per visit
+        if ((int)CurrentLevel != 90) heldLogged = false;
+        if (inLobby && fromStage && g_netState == 2 && g_stateReady && !g_state.pending.empty() && !heldLogged) {
+            heldLogged = true;
+            Say("CounterChao: %d item(s) held: this visit came from a stage (Level=%d). They are delivered on a visit from stage select\n",
+                (int)g_state.pending.size(), levelBeforeChao);
+        }
         int written = 0;
         bool dropped = false;
-        if (inLobby && g_netState == 2 && g_stateReady && !g_state.pending.empty() && freeSlots > 0) {
+        if (inLobby && !fromStage && g_netState == 2 && g_stateReady && !g_state.pending.empty() && freeSlots > 0) {
             for (int i = 0; i < CHAO_SLOTS && !g_state.pending.empty(); i++) {
                 if (!(items[i].type == 0xFFFF && items[i].garden == 0xFFFF)) continue;
                 int type = g_state.pending.front();
@@ -760,7 +778,9 @@ extern "C"
             snprintf(head, sizeof(head), "%d rings delivered.", ringsNow);
             if (left > 0) {
                 char more[128];
-                snprintf(more, sizeof(more), "%d item%s waiting. Your garden is full. Use or feed some items, then come back to the lobby.",
+                snprintf(more, sizeof(more), fromStage
+                    ? "%d item%s waiting. They arrive when you come in from stage select."
+                    : "%d item%s waiting. Your garden is full. Use or feed some items, then come back to the lobby.",
                     left, left == 1 ? "" : "s");
                 MsgShow(0xFF5EE6B0, "CounterChao", head, more);
             }
@@ -837,7 +857,9 @@ extern "C"
             }
             else if (waiting > 0) {
                 snprintf(head, sizeof(head), "%d item%s waiting.", waiting, waiting == 1 ? "" : "s");
-                MsgShow(0xFFFFC857, "CounterChao", head, "Your garden is full. Use or feed some items, then come back to the lobby.");
+                MsgShow(0xFFFFC857, "CounterChao", head, fromStage
+                    ? "They arrive when you come in from stage select."
+                    : "Your garden is full. Use or feed some items, then come back to the lobby.");
             }
             else if (outcome == OUT_SKIPPED) {
                 MsgShow(0xFF6CB6FF, "CounterChao", "Checked Leetify a moment ago.", "Restart the game in a few minutes to check again.");
