@@ -34,7 +34,7 @@ Found a bug or something confusing? Please open an issue.
 2. Start SA2 and go to Stage Select -> Chao Garden, then into the Chao World lobby.
 3. A message shows up for a few seconds telling you what happened (see Messages below).
 4. Walk into the garden. Your items are there!
-5. Save your game by walking to the teleporter and exiting. (protip: tick **Close the game after saving** in Configure)
+5. Save your game by walking to the teleporter and exiting, or with **Exit game** in the garden's pause menu. (protip: tick **Close the game after saving** in Configure)
 
 The mod checks Leetify once, when the game starts. If you play a match while the game is open, restart the game to pick it up. If it checked less than 3 minutes ago, it waits and doesn't ask Leetify again.
 Matches are rewarded once. If your garden's 10 item slots are full, the leftovers wait, and they show up the next time you walk through the lobby with free slots.
@@ -58,7 +58,8 @@ Been away a while? Only your 3 newest matches count. Older ones are skipped.
 |Message|What to do|
 |-|-|
 |**N items and R rings delivered**|Walk into the garden. Spend the rings at the Black Market.|
-|**N items waiting**|Your garden is full. Use or feed some items, then walk back through the lobby.|
+|**N items waiting. Your garden is full**|Use or feed some items, then walk back through the lobby.|
+|**N items waiting. They arrive when you come in from stage select**|You came in with a Chao Key. Enter Chao World from Stage Select next time.|
 |**No new matches**|Play a CS2 match, let Leetify pick it up, then restart the game.|
 |**Checked Leetify a moment ago**|Restart the game in a few minutes to check again.|
 |**Setup needed**|Open Configure in the Mod Manager and enter your SteamID64.|
@@ -79,6 +80,14 @@ The only fix I know of is turning Smart App Control off (Windows Security -> App
 **Windows Defender shows a "security scan" pop-up the first time.**
 Normal for a new download. It passes after a few seconds.
 
+## FAQ
+
+**I came into Chao World with a Chao Key. Where are my items?**
+Your rings arrive right away. Items wait for your next visit from Stage Select.
+
+**What happened to the items lying in my garden after a Chao Key visit?**
+A Chao Key visit replaces whatever is lying in your garden with the animals and drives from that stage. Use or feed your items first.
+
 ## Privacy and security
 
 The mod sends your SteamID64 to Leetify's public API over HTTPS, at most once per game launch, and nothing else. No API key is needed. It never shows or changes any Leetify numbers; it only uses your stats to decide rewards.
@@ -88,7 +97,7 @@ In its own mod folder the mod keeps three small files: `config.ini` (your settin
 ## Current limitations :(
 
 * Windows only.
-* Items and rings are handed to the game in the lobby. If the game closes or crashes before you save at the exit teleporter, they are lost.
+* Items and rings are handed to the game in the lobby. If the game closes or crashes before it saves at the exit teleporter or through Exit game, they are lost.
 * Tested with the SA2 Steam version and the default Chao garden. Other Chao mods haven't been tested.
 
 ## Python prototype (deprecated)
