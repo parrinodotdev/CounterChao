@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
 #include <stdexcept>
 #include "CounterChao_msg.h"
 #include "json.hpp"
@@ -56,6 +57,9 @@ static const double RARE_AT_LEAST = 0.07;
 static const int RINGS_PER_ROUND_WON = 5;
 static const int RINGS_PER_MATCH_WIN = 50;
 static const int RINGS_CAP = 9999999;   // never push the game's ring total past this (a safe guess, not a known game limit)
+
+// ---- Leetify: don't ask again if the last good answer is this recent. 0 = always ask. ----
+static const long long FETCH_MIN_SECONDS = 180;
 
 static uint32_t Fnv1a(const std::string& s)
 {
@@ -264,6 +268,7 @@ struct State {
     std::vector<std::string> processed;   // newest first
     std::vector<int> pending;             // item type ids waiting for delivery
     int pendingRings = 0;                 // rings waiting for delivery
+    long long lastFetch = 0;              // when Leetify last gave a good answer (seconds since 1970, UTC). 0 = never
 };
 
 static bool LoadState(State& s, std::string& err)
@@ -279,6 +284,9 @@ static bool LoadState(State& s, std::string& err)
         auto pr = j.find("pending_rings");   // missing in state files from before rings existed
         if (pr != j.end() && pr->is_number_integer()) s.pendingRings = pr->get<int>();
         if (s.pendingRings < 0 || s.pendingRings > RINGS_CAP) s.pendingRings = 0;
+        auto lf = j.find("last_fetch");      // missing in state files from before 0.3.0
+        if (lf != j.end() && lf->is_number_integer()) s.lastFetch = lf->get<long long>();
+        if (s.lastFetch < 0) s.lastFetch = 0;
         s.exists = true;
         return true;
     }
@@ -295,6 +303,7 @@ static bool SaveState(const State& s)
     j["processed"] = s.processed;
     j["pending"] = s.pending;
     j["pending_rings"] = s.pendingRings;
+    j["last_fetch"] = s.lastFetch;
     std::string fin = g_modDir + "\\state.json";
     std::string tmp = fin + ".tmp";
     {
@@ -326,7 +335,8 @@ enum Outcome : LONG {
     OUT_HTTP_ERR,     // HTTP response other than 200
     OUT_NO_MATCHES,   // 200 with an empty match list
     OUT_PARSE,        // 200 but the reply wasn't the JSON we expect
-    OUT_SAVE_FAIL     // couldn't write state.json
+    OUT_SAVE_FAIL,    // couldn't write state.json
+    OUT_SKIPPED       // Leetify was asked a moment ago, so this launch didn't ask again
 };
 static volatile LONG g_outcome = OUT_NONE;   // written before g_netState becomes 2
 
@@ -339,6 +349,20 @@ static DWORD WINAPI NetThread(LPVOID)
     if (!LoadState(state, err)) {
         snprintf(g_summary, sizeof(g_summary), "%s", err.c_str());
         InterlockedExchange(&g_outcome, OUT_STATE_BAD);
+        InterlockedExchange(&g_netState, 2);
+        return 0;
+    }
+
+    // Asked Leetify a moment ago and got a good answer? Don't ask again yet.
+    // Anything already waiting is still delivered. A clock that went backwards never blocks a fetch.
+    long long nowSec = (long long)time(nullptr);
+    if (state.exists && FETCH_MIN_SECONDS > 0 && state.lastFetch > 0
+        && nowSec >= state.lastFetch && nowSec - state.lastFetch < FETCH_MIN_SECONDS) {
+        g_state = state;
+        InterlockedExchange(&g_stateReady, 1);
+        snprintf(g_summary, sizeof(g_summary), "fetch skipped: last good fetch was %lld s ago (minimum %lld) pending=%d pending_rings=%d",
+            nowSec - state.lastFetch, FETCH_MIN_SECONDS, (int)state.pending.size(), state.pendingRings);
+        InterlockedExchange(&g_outcome, OUT_SKIPPED);
         InterlockedExchange(&g_netState, 2);
         return 0;
     }
@@ -427,6 +451,7 @@ static DWORD WINAPI NetThread(LPVOID)
                 ns.exists = true;
                 ns.pending = pending;
                 ns.pendingRings = pendingRings;
+                ns.lastFetch = nowSec;
                 std::set<std::string> have;
                 for (const auto& m : j) { std::string id = m.value("id", std::string()); if (have.insert(id).second) ns.processed.push_back(id); }
                 for (const auto& id : state.processed) if (have.insert(id).second) ns.processed.push_back(id);
@@ -719,8 +744,19 @@ extern "C"
                     "Check your internet and restart the game. Details are in CounterChao.log.");
             }
             else if (outcome == OUT_HTTP_ERR) {
-                MsgShow(0xFFFF7B72, "CounterChao: no matches found", "Leetify didn't return your matches.",
-                    "Check your SteamID64 in Configure and make sure your Leetify profile is public.");
+                DWORD http = g_netStatus;
+                if (http == 429) {
+                    MsgShow(0xFFFFC857, "CounterChao: Leetify is busy", "Too many requests right now.",
+                        "Try again in a few minutes.");
+                }
+                else if (http >= 500 && http <= 599) {
+                    MsgShow(0xFFFF7B72, "CounterChao: Leetify is having trouble", "Leetify's servers returned an error.",
+                        "Try again later. Details are in CounterChao.log.");
+                }
+                else {
+                    MsgShow(0xFFFF7B72, "CounterChao: no matches found", "Leetify didn't return your matches.",
+                        "Check your SteamID64 in Configure and make sure your Leetify profile is public.");
+                }
             }
             else if (outcome == OUT_NO_MATCHES) {
                 MsgShow(0xFFFF7B72, "CounterChao: no matches found", "Leetify has no matches for this SteamID64.",
@@ -748,6 +784,9 @@ extern "C"
             else if (waiting > 0) {
                 snprintf(head, sizeof(head), "%d item%s waiting.", waiting, waiting == 1 ? "" : "s");
                 MsgShow(0xFFFFC857, "CounterChao", head, "Your garden is full. Use or feed some items, then come back to the lobby.");
+            }
+            else if (outcome == OUT_SKIPPED) {
+                MsgShow(0xFF6CB6FF, "CounterChao", "Checked Leetify a moment ago.", "Restart the game in a few minutes to check again.");
             }
             else {
                 MsgShow(0xFF6CB6FF, "CounterChao", "No new matches.", "Play a CS2 match, let Leetify pick it up, then restart the game.");

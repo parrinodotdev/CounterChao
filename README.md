@@ -1,12 +1,12 @@
 # CounterChao
 
-CS2 kills, headshots, flashes, and multi-kills -> Chao Garden animals and Chaos Drives
+CS2 kills, headshots, flashes, multi-kills and round wins -> Chao Garden animals, Chaos Drives and rings
 
 Match data provided by [Leetify](https://leetify.com). Not affiliated with SEGA, Valve, or Leetify.
 
 ## What it does
 
-CounterChao is a Sonic Adventure 2 mod. When you start the game it reads your latest CS2 matches from the Leetify API, works out rewards from your stats, and places the items in your Chao Garden. The game grants items, saves and checksums them itself.
+CounterChao is a Sonic Adventure 2 mod. When you start the game it reads your latest CS2 matches from the Leetify API, works out rewards from your stats, places the items in your Chao Garden and adds rings to spend at the Black Market. The game grants items, saves and checksums them itself.
 
 ## Status
 
@@ -36,7 +36,7 @@ Found a bug or something confusing? Please open an issue.
 4. Walk into the garden. Your items are there!
 5. Save your game by walking to the teleporter and exiting. (protip: tick **Close the game after saving** in Configure)
 
-The mod checks Leetify once, when the game starts. If you play a match while the game is open, restart the game to pick it up.
+The mod checks Leetify once, when the game starts. If you play a match while the game is open, restart the game to pick it up. If it checked less than 3 minutes ago, it waits and doesn't ask Leetify again.
 Matches are rewarded once. If your garden's 10 item slots are full, the leftovers wait, and they show up the next time you walk through the lobby with free slots.
 The first time you run it, only your latest match counts, so you don't get a mountain of items at once. You can raise that (up to 5 matches) in Configure.
 
@@ -48,6 +48,7 @@ The first time you run it, only your latest match counts, so you don't get a mou
 * **Yellow Chaos Drive**: every 3 enemies flashed
 * **Animals**: multi-kill rounds (3K, 4K, 5K), flashes that lead to a kill, and flash assists
 * **Rare animals**: a standout match can drop one
+* **Rings**: 5 for every round you win, plus 50 for winning the match
 
 A match needs at least 10 rounds to count, a match gives at most 10 items, and up to 3 new matches are rewarded each time you start the game.
 Been away a while? Only your 3 newest matches count. Older ones are skipped.
@@ -56,12 +57,15 @@ Been away a while? Only your 3 newest matches count. Older ones are skipped.
 
 |Message|What to do|
 |-|-|
-|**N items delivered**|Walk into the garden.|
+|**N items and R rings delivered**|Walk into the garden. Spend the rings at the Black Market.|
 |**N items waiting**|Your garden is full. Use or feed some items, then walk back through the lobby.|
 |**No new matches**|Play a CS2 match, let Leetify pick it up, then restart the game.|
+|**Checked Leetify a moment ago**|Restart the game in a few minutes to check again.|
 |**Setup needed**|Open Configure in the Mod Manager and enter your SteamID64.|
 |**No matches found**|Check your SteamID64 in Configure and make sure your Leetify profile is public.|
 |**Can't reach Leetify**|Check your internet and restart the game. Waiting items still show up.|
+|**Leetify is busy**|Too many requests. Try again in a few minutes.|
+|**Leetify is having trouble**|Leetify's servers returned an error. Try again later.|
 |**Unexpected reply**|Leetify sent something weird. Try again later.|
 |**State file problem**|`state.json` couldn't be read. Nothing was delivered. Check `CounterChao.log`.|
 |**Something went wrong**|Couldn't save. Nothing was delivered. Check `CounterChao.log`.|
@@ -77,14 +81,14 @@ Normal for a new download. It passes after a few seconds.
 
 ## Privacy and security
 
-The mod sends your SteamID64 to Leetify's public API over HTTPS, once per game launch, and nothing else. No API key is needed. It never shows or changes any Leetify numbers; it only uses your stats to decide rewards.
+The mod sends your SteamID64 to Leetify's public API over HTTPS, at most once per game launch, and nothing else. No API key is needed. It never shows or changes any Leetify numbers; it only uses your stats to decide rewards.
 Items are written into the running game's memory, and the game saves them normally. No admin rights needed. No SEGA files are included in this project.
-In its own mod folder the mod keeps three small files: `config.ini` (your settings), `state.json` (which matches were already rewarded, and any items waiting), and `CounterChao.log` (turn it off in Configure if you like).
+In its own mod folder the mod keeps three small files: `config.ini` (your settings), `state.json` (which matches were already rewarded, any items and rings waiting, and when it last checked Leetify), and `CounterChao.log` (turn it off in Configure if you like).
 
 ## Current limitations :(
 
 * Windows only.
-* Items are handed to the game as soon as they appear in the garden. If the game crashes before it saves, they can be lost.
+* Items and rings are handed to the game in the lobby. If the game closes or crashes before you save at the exit teleporter, they are lost.
 * Tested with the SA2 Steam version and the default Chao garden. Other Chao mods haven't been tested.
 
 ## Python prototype (deprecated)
