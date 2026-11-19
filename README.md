@@ -36,12 +36,14 @@ Found a bug or something confusing? Please open an issue.
 4. Walk into the garden. Your items are there!
 5. Save your game by walking to the teleporter and exiting, or with **Exit game** in the garden's pause menu. (protip: tick **Close the game after saving** in Configure)
 
+![How CounterChao works](assets/how-it-works.png)
 The mod checks Leetify once, when the game starts. If you play a match while the game is open, restart the game to pick it up. If it checked less than 3 minutes ago, it waits and doesn't ask Leetify again.
 Matches are rewarded once. If your garden's 10 item slots are full, the leftovers wait, and they show up the next time you walk through the lobby with free slots.
 The first time you run it, only your latest match counts, so you don't get a mountain of items at once. You can raise that (up to 5 matches) in Configure.
 
 ## How rewards work
 
+![CS2 moments and the rewards they unlock](assets/rewards.png)
 * **Red Chaos Drive**: every 5 kills
 * **Purple Chaos Drive**: every 4 headshot kills
 * **Green Chaos Drive**: every successful trade kill
@@ -120,6 +122,8 @@ It worked by writing into the running game's memory from outside. It needed Pyth
 * [nlohmann/json](https://github.com/nlohmann/json) for JSON parsing
 * [Leetify](https://leetify.com), for the public API. Match data provided by Leetify.
 Sonic Adventure 2 belongs to SEGA. Counter-Strike and CS2 belong to Valve.
+* Chao animal and Chaos Drive screenshots: [Chao Island gallery](https://chao-island.com/gallery/)
+* CS2 kill feed images: [CS2 Killfeed Generator](https://killfeed-generator.github.io/killfeed-generator-cs2.html)
 
 ## License
 
